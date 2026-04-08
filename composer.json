@@ -1,5 +1,5 @@
 {
-    "name": "Libxa/framework",
+    "name": "libxa/framework",
     "description": "LibxaFrame core framework — Foundation, Router, Atlas ORM, Blade-X, Reactive, Modules, Frontend Adapters.",
     "type": "library",
     "license": "MIT",
