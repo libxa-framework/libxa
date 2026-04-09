@@ -118,12 +118,12 @@ class ServeCommand extends Command
 
         // ── ASCII Logo (gradient indigo → purple) ──────────────────
         $logo = [
-            "{$I}███╗   ██╗███████╗{$P}██╗  ██╗ █████╗ {$R}",
-            "{$I}████╗  ██║██╔════╝{$P}╚██╗██╔╝██╔══██╗{$R}",
-            "{$I}██╔██╗ ██║█████╗  {$P} ╚███╔╝ ███████║{$R}",
-            "{$I}██║╚██╗██║██╔══╝  {$P} ██╔██╗ ██╔══██║{$R}",
-            "{$I}██║ ╚████║███████╗{$P}██╔╝ ██╗██║  ██║{$R}",
-            "{$I}╚═╝  ╚═══╝╚══════╝{$P}╚═╝  ╚═╝╚═╝  ╚═╝{$R}",
+            "{$I}██╗     ██╗{$P}██████╗ ██╗  ██╗ █████╗ {$R}",
+            "{$I}██║     ██║{$P}██╔══██╗╚██╗██╔╝██╔══██╗{$R}",
+            "{$I}██║     ██║{$P}██████╔╝ ╚███╔╝ ███████║{$R}",
+            "{$I}██║     ██║{$P}██╔══██╗ ██╔██╗ ██╔══██║{$R}",
+            "{$I}███████╗██║{$P}██████╔╝██╔╝ ██╗██║  ██║{$R}",
+            "{$I}╚══════╝╚═╝{$P}╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝{$R}",
         ];
 
         $output->writeln('');
@@ -131,8 +131,9 @@ class ServeCommand extends Command
             $output->writeln("  $line");
         }
 
-        // ── Tagline ───────────────────────────────────────────────
-        $output->writeln("  {$D}{$M}  The modern PHP framework for the next generation.{$R}");
+        // ── Tagline & Author ──────────────────────────────────────
+        $output->writeln("  {$D}{$M}The modern PHP framework for the next generation.{$R}");
+        $output->writeln("  {$D}{$M}Author: {$R}{$B}{$P}Voukeng Dongmo Franky Steve{$R}  {$D}{$M}·  {$R}{$I}libxa@vyloxi.com{$R}");
         $output->writeln('');
 
         // ── Divider ───────────────────────────────────────────────

@@ -280,21 +280,83 @@ interface AiDriverContract
 
 namespace Libxa\Atlas\AI\Drivers;
 
+use Libxa\Http\Client;
+
 class OpenAiDriver implements \Libxa\Atlas\AI\AiDriverContract
 {
     public function generateSql(string $question, string $schemaContext): string
     {
-        // TODO: Implement OpenAI API call
-        // $key    = app()->env('ATLAS_AI_KEY');
-        // $model  = app()->env('ATLAS_AI_MODEL', 'gpt-4o-mini');
-        // $prompt = "Given this schema:\n$schemaContext\n\nWrite a safe, read-only SQL SELECT query for:\n$question\n\nReturn ONLY the SQL, nothing else.";
-        // ... call OpenAI API ...
-        throw new \RuntimeException('OpenAI driver not yet implemented. Add your API call in ' . __FILE__);
+        $app = \Libxa\Foundation\Application::getInstance();
+        $key = $app->env('OPENAI_API_KEY');
+        
+        if (empty($key)) {
+            throw new \RuntimeException('Missing OPENAI_API_KEY in .env');
+        }
+
+        $client = new Client([
+            'headers' => [
+                'Authorization' => "Bearer {$key}",
+                'Content-Type'  => 'application/json',
+            ]
+        ]);
+
+        $prompt = "Given this database schema:\n{$schemaContext}\n\nWrite a safe, read-only SQL SELECT query for the following request:\n\"{$question}\"\n\nReturn ONLY the SQL string, no markdown, no explanation.";
+
+        $baseUrl = rtrim($app->env('AI_BASE_URL', 'https://api.openai.com/v1'), '/');
+        $response = $client->post($baseUrl . '/chat/completions', [
+            'model' => $app->env('ATLAS_AI_MODEL', 'gpt-4o-mini'),
+            'messages' => [
+                ['role' => 'system', 'content' => 'You are a SQL expert. You only output raw SQL SELECT statements.'],
+                ['role' => 'user', 'content' => $prompt]
+            ],
+            'temperature' => 0,
+        ]);
+
+        $sql = $response['body']['choices'][0]['message']['content'] ?? '';
+        
+        return $this->cleanSql($sql);
     }
 
     public function generateScope(string $description, string $schemaContext): string
     {
-        throw new \RuntimeException('OpenAI driver not yet implemented.');
+        $app = \Libxa\Foundation\Application::getInstance();
+        $key = $app->env('OPENAI_API_KEY');
+
+        $client = new Client([
+            'headers' => [
+                'Authorization' => "Bearer {$key}",
+                'Content-Type'  => 'application/json',
+            ]
+        ]);
+
+        $prompt = "Given this database schema:\n{$schemaContext}\n\nGenerate a PHP method body for an Atlas ORM scope that fulfills this description:\n\"{$description}\"\n\nUse standard Libxa\\Atlas\\QueryBuilder methods like where(), orderBy(), limit().\n\nReturn ONLY the PHP code, no tags, no markdown.";
+
+        $baseUrl = rtrim($app->env('AI_BASE_URL', 'https://api.openai.com/v1'), '/');
+        $response = $client->post($baseUrl . '/chat/completions', [
+            'model' => $app->env('ATLAS_AI_MODEL', 'gpt-4o-mini'),
+            'messages' => [
+                ['role' => 'system', 'content' => 'You are a PHP framework expert.'],
+                ['role' => 'user', 'content' => $prompt]
+            ],
+            'temperature' => 0,
+        ]);
+
+        return trim($response['body']['choices'][0]['message']['content'] ?? '', " \t\n\r\0\x0B` ");
+    }
+
+    protected function cleanSql(string $sql): string
+    {
+        $sql = trim($sql);
+        if (str_starts_with($sql, '```sql')) {
+            $sql = substr($sql, 6);
+        }
+        if (str_starts_with($sql, '```')) {
+            $sql = substr($sql, 3);
+        }
+        if (str_ends_with($sql, '```')) {
+            $sql = substr($sql, 0, -3);
+        }
+        return trim($sql, " \t\n\r\0\x0B;");
     }
 }
 

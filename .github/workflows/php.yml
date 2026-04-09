@@ -54,4 +54,6 @@ jobs:
         run: vendor/bin/phpcs src --standard=PSR12 --ignore=vendor/*
 
       - name: 🧪 Unit Tests (PHPUnit)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: vendor/bin/phpunit tests --display-deprecations --display-warnings

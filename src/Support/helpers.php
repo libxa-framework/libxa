@@ -446,6 +446,16 @@ if (! function_exists('__')) {
     }
 }
 
+if (! function_exists('ai')) {
+    /**
+     * Get the AI manager instance.
+     */
+    function ai(): \Libxa\Ai\AiManager
+    {
+        return app('ai');
+    }
+}
+
 if (! function_exists('vite')) {
     /**
      * Generate Vite asset tags.

@@ -344,6 +344,7 @@ class Application extends Container
             \Libxa\Providers\QueueServiceProvider::class,
             \Libxa\Providers\MailServiceProvider::class,
             \Libxa\Providers\BroadcastServiceProvider::class,
+            \Libxa\Providers\AiServiceProvider::class,
             \Libxa\Providers\NovaServiceProvider::class,
             \Libxa\Providers\PulseServiceProvider::class,
         ];
