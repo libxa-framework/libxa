@@ -50,12 +50,12 @@ class Application extends SymfonyApplication
         $R = self::C_RESET;
 
         return implode(PHP_EOL, [
-            "  {$I}███╗   ██╗███████╗{$P}██╗  ██╗ █████╗ {$R}",
-            "  {$I}████╗  ██║██╔════╝{$P}╚██╗██╔╝██╔══██╗{$R}",
-            "  {$I}██╔██╗ ██║█████╗  {$P} ╚███╔╝ ███████║{$R}",
-            "  {$I}██║╚██╗██║██╔══╝  {$P} ██╔██╗ ██╔══██║{$R}",
-            "  {$I}██║ ╚████║███████╗{$P}██╔╝ ██╗██║  ██║{$R}",
-            "  {$I}╚═╝  ╚═══╝╚══════╝{$P}╚═╝  ╚═╝╚═╝  ╚═╝{$R}",
+            "  {$I}██╗     ██╗{$P}██████╗ ██╗  ██╗ █████╗ {$R}",
+            "  {$I}██║     ██║{$P}██╔══██╗╚██╗██╔╝██╔══██╗{$R}",
+            "  {$I}██║     ██║{$P}██████╔╝ ╚███╔╝ ███████║{$R}",
+            "  {$I}██║     ██║{$P}██╔══██╗ ██╔██╗ ██╔══██║{$R}",
+            "  {$I}███████╗██║{$P}██████╔╝██╔╝ ██╗██║  ██║{$R}",
+            "  {$I}╚══════╝╚═╝{$P}╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝{$R}",
         ]);
     }
 
@@ -65,6 +65,7 @@ class Application extends SymfonyApplication
         $M = self::C_MUTED;
         $D = self::C_DIM;
         $B = self::C_BOLD;
+        $P = self::C_PURPLE;
         $R = self::C_RESET;
 
         $version = LibxaApplication::VERSION;
@@ -75,6 +76,7 @@ class Application extends SymfonyApplication
             $this->renderLogo(),
             '',
             "  {$D}{$M}The modern PHP framework for the next generation   {$B}v{$version}{$R}  {$I}[{$env}]{$R}",
+            "  {$D}{$M}Author: {$R}{$B}{$P}Voukeng Dongmo Franky Steve{$R}  {$D}{$M}·  {$R}{$I}libxa@vyloxi.com{$R}",
             '',
             "  {$I}┌─────────────────────────────────────────────────────────────┐{$R}",
             "  {$I}│{$R}  {$M}Run {$B}{$I}php Libxa serve{$R}{$M}            → start the dev server       {$I}│{$R}",
