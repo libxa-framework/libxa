@@ -22,11 +22,20 @@ class Session
     /**
      * Start the session if not already started.
      */
+
     public function start(): void
     {
+        // Sessions are meaningless in CLI context and cause
+        // "headers already sent" warnings from banner output.
+        if (PHP_SAPI === 'cli') {
+            $this->started = false;
+            return;
+        }
+
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
+
         $this->started = true;
     }
 
