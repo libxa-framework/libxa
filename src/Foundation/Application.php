@@ -77,10 +77,11 @@ class Application extends Container
     }
 
     /**
-     * Load auto-discovered packages from vendor.
+     * Load auto-discovered packages from vendor and packages/ directory.
      */
     protected function loadPackages(): void
     {
+        // Load packages from packages/ directory
         $manifest = (new ModuleManifestManager($this, 'packages'))->load();
 
         foreach ($manifest as $package) {
@@ -96,6 +97,41 @@ class Application extends Container
             // Fallback to singular "provider"
             if (isset($package['provider']) && class_exists($package['provider'])) {
                 $this->register($package['provider']);
+            }
+        }
+
+        // Load Composer-installed packages from vendor/ directory
+        $vendorDir = $this->basePath() . '/vendor';
+        if (is_dir($vendorDir)) {
+            $installedJson = $vendorDir . '/composer/installed.json';
+            if (file_exists($installedJson)) {
+                $installed = json_decode(file_get_contents($installedJson), true);
+                $packages = $installed['packages'] ?? $installed;
+                
+                foreach ($packages as $package) {
+                    $name = $package['name'] ?? '';
+                    $extra = $package['extra'] ?? [];
+                    
+                    // Only load libxa packages
+                    if (str_starts_with($name, 'libxa/') || str_starts_with($name, 'libxaframe/')) {
+                        // Check for laravel-style provider discovery
+                        if (isset($extra['laravel']['providers'])) {
+                            foreach ($extra['laravel']['providers'] as $provider) {
+                                if (class_exists($provider)) {
+                                    $this->register($provider);
+                                }
+                            }
+                        }
+                        // Check for libxa-style provider discovery
+                        if (isset($extra['Libxa']['providers'])) {
+                            foreach ($extra['Libxa']['providers'] as $provider) {
+                                if (class_exists($provider)) {
+                                    $this->register($provider);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
