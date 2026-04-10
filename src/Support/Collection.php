@@ -280,5 +280,19 @@ class Collection implements \Countable, \IteratorAggregate, \JsonSerializable
     public function jsonSerialize(): mixed { return $this->items; }
     public function getIterator(): \ArrayIterator { return new \ArrayIterator($this->items); }
 
+    public function toCsv(): string
+    {
+        if ($this->isEmpty()) return '';
+        
+        $output = fopen('php://temp', 'r+');
+        foreach ($this->items as $row) {
+            fputcsv($output, (array) $row, ',', '"', "");
+        }
+        rewind($output);
+        $csv = stream_get_contents($output);
+        fclose($output);
+        return $csv;
+    }
+
     public function __toString(): string { return $this->toJson(); }
 }

@@ -113,4 +113,23 @@ class Client
 
         return $url;
     }
+
+    /**
+     * Run multiple HTTP requests concurrently.
+     * 
+     * @param array $requests Array of closures that execute HTTP requests.
+     * @return array
+     */
+    public static function pool(array $requests): array
+    {
+        // For Fiber environments, we can yield inside a curl_multi_select loop
+        // Here we build a pure curl_multi structural concurrency model
+        $mh = curl_multi_init();
+        $handles = [];
+        $results = [];
+
+        // Assuming $requests are closures that return configured but un-executed CURL handles or simulated Client configurations.
+        // To simplify for the framework scale, we execute standard structural concurrency via fibers:
+        return \Libxa\Async\Parallel::run($requests);
+    }
 }

@@ -6,79 +6,74 @@ namespace Libxa\Storage;
 
 use Libxa\Foundation\Application;
 
+/**
+ * Storage Facade
+ */
 class Storage
 {
-    public function __construct(protected Application $app)
+    /**
+     * Get the storage manager instance.
+     */
+    protected static function manager(): StorageManager
     {
+        return Application::getInstance()->make('storage');
+    }
+
+    public static function put(string $path, string $content): bool
+    {
+        return static::manager()->put($path, $content);
+    }
+
+    public static function get(string $path): ?string
+    {
+        return static::manager()->get($path);
+    }
+
+    public static function exists(string $path): bool
+    {
+        return static::manager()->exists($path);
+    }
+
+    public static function delete(string|array $paths): bool
+    {
+        return static::manager()->delete(...(is_array($paths) ? $paths : func_get_args()));
+    }
+
+    public static function move(string $from, string $to): bool
+    {
+        return static::manager()->move($from, $to);
+    }
+
+    public static function copy(string $from, string $to): bool
+    {
+        return static::manager()->copy($from, $to);
+    }
+
+    public static function mimeType(string $path): ?string
+    {
+        return static::manager()->mimeType($path);
+    }
+
+    public static function files(string $directory = '', bool $recursive = false): array
+    {
+        return static::manager()->files($directory, $recursive);
+    }
+
+    public static function url(string $path): string
+    {
+        return static::manager()->url($path);
+    }
+
+    public static function temporaryUrl(string $path, \DateTimeInterface $expiration): string
+    {
+        return static::manager()->temporaryUrl($path, $expiration);
     }
 
     /**
-     * Get the base storage path.
+     * Get a disk instance (for future multi-disk support).
      */
-    protected function storagePath(string $path = ''): string
+    public static function disk(string $name = 'local'): StorageManager
     {
-        return $this->app->basePath('src/storage/app/' . ltrim($path, '/'));
-    }
-
-    /**
-     * Store a file on a given path.
-     */
-    public function put(string $path, string $content): bool
-    {
-        $fullPath = $this->storagePath($path);
-        
-        $directory = dirname($fullPath);
-        if (!is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
-
-        return file_put_contents($fullPath, $content) !== false;
-    }
-
-    /**
-     * Get the content of a file.
-     */
-    public function get(string $path): ?string
-    {
-        $fullPath = $this->storagePath($path);
-        
-        if (!$this->exists($path)) {
-            return null;
-        }
-
-        return file_get_contents($fullPath);
-    }
-
-    /**
-     * Check if a file exists.
-     */
-    public function exists(string $path): bool
-    {
-        return file_exists($this->storagePath($path));
-    }
-
-    /**
-     * Delete a file.
-     */
-    public function delete(string $path): bool
-    {
-        if (!$this->exists($path)) {
-            return false;
-        }
-
-        return unlink($this->storagePath($path));
-    }
-
-    /**
-     * Get the public URL for a file.
-     */
-    public function url(string $path): string
-    {
-        // For public storage (storage/app/public), the URL targets /storage/path
-        if (str_starts_with($path, 'public/')) {
-            $path = substr($path, 7);
-        }
-
-        return '/' . 'storage/' . ltrim($path, '/');
+        return static::manager();
     }
 }

@@ -56,4 +56,11 @@ jobs:
       - name: 🧪 Unit Tests (PHPUnit)
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          APP_KEY: base64:t28Z0M8k6X9... # Testing key
         run: vendor/bin/phpunit tests --display-deprecations --display-warnings
+
+      - name: 🧪 Validate Fiber Concurrency
+        run: vendor/bin/phpunit tests/FiberParallelTest.php
+
+      - name: 🧪 Validate Zero-Config Tenancy
+        run: vendor/bin/phpunit tests/TenancyTest.php

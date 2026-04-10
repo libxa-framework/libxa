@@ -42,6 +42,12 @@ class Response
         return static::redirect($referer);
     }
 
+    public function intended(string $default = '/'): static
+    {
+        $url = app('session')?->get('url.intended', $default) ?? $default;
+        return $this->withStatus(302)->withHeader('Location', $url);
+    }
+
     public static function download(string $filePath, string $name = ''): static
     {
         if (! file_exists($filePath)) {

@@ -101,10 +101,24 @@ if (! function_exists('collect')) {
     }
 }
 
+if (! function_exists('arr')) {
+    function arr(array $items = []): \Libxa\Support\Collection
+    {
+        return collect($items);
+    }
+}
+
 if (! function_exists('str')) {
     function str(string $value = ''): \Libxa\Support\StringableProxy
     {
         return \Libxa\Support\Str::of($value);
+    }
+}
+
+if (! function_exists('num')) {
+    function num(float|int $value = 0): \Libxa\Support\NumberableProxy
+    {
+        return \Libxa\Support\Number::for($value);
     }
 }
 
@@ -170,16 +184,23 @@ if (! function_exists('session')) {
 }
 
 if (! function_exists('now')) {
-    function now(): \DateTimeImmutable
+    function now(): \Carbon\Carbon
     {
-        return new \DateTimeImmutable('now');
+        return \Carbon\Carbon::now();
     }
 }
 
 if (! function_exists('today')) {
-    function today(): \DateTimeImmutable
+    function today(): \Carbon\Carbon
     {
-        return new \DateTimeImmutable('today');
+        return \Carbon\Carbon::today();
+    }
+}
+
+if (! function_exists('carbon')) {
+    function carbon(?string $time = null, ?string $tz = null): \Carbon\Carbon
+    {
+        return new \Carbon\Carbon($time, $tz);
     }
 }
 
@@ -243,6 +264,20 @@ if (! function_exists('resource_path')) {
     function resource_path(string $path = ''): string
     {
         return app()->resourcePath($path);
+    }
+}
+
+if (! function_exists('app_path')) {
+    function app_path(string $path = ''): string
+    {
+        return app()->appPath($path);
+    }
+}
+
+if (! function_exists('config_path')) {
+    function config_path(string $path = ''): string
+    {
+        return app()->configPath($path);
     }
 }
 
@@ -326,6 +361,35 @@ if (! function_exists('data_set')) {
     }
 }
 
+if (! function_exists('data_forget')) {
+    function data_forget(mixed &$target, string|array $keys): void
+    {
+        $keys = (array) $keys;
+
+        foreach ($keys as $key) {
+            if (is_array($target) && array_key_exists($key, $target)) {
+                unset($target[$key]);
+                continue;
+            }
+
+            $parts = explode('.', $key);
+            $array = &$target;
+
+            while (count($parts) > 1) {
+                $part = array_shift($parts);
+
+                if (isset($array[$part]) && is_array($array[$part])) {
+                    $array = &$array[$part];
+                } else {
+                    continue 2;
+                }
+            }
+
+            unset($array[array_shift($parts)]);
+        }
+    }
+}
+
 if (! function_exists('auth')) {
     function auth(?string $guard = null)
     {
@@ -371,7 +435,7 @@ if (! function_exists('secure_hash')) {
 }
 
 if (! function_exists('storage')) {
-    function storage(): \Libxa\Storage\Storage
+    function storage(): \Libxa\Storage\StorageManager
     {
         return app('storage');
     }
@@ -456,6 +520,16 @@ if (! function_exists('ai')) {
     }
 }
 
+if (! function_exists('storage')) {
+    /**
+     * Get the storage manager instance.
+     */
+    function storage(): \Libxa\Storage\StorageManager
+    {
+        return app('storage');
+    }
+}
+
 if (! function_exists('vite')) {
     /**
      * Generate Vite asset tags.
@@ -463,5 +537,153 @@ if (! function_exists('vite')) {
     function vite(array|string $entries): string
     {
         return \Libxa\Frontend\ViteManifest::tags($entries);
+    }
+}
+
+if (! function_exists('log')) {
+    function log(?string $message = null, array $context = [], string $level = 'info'): mixed
+    {
+        $logger = app('logger');
+        if (is_null($message)) return $logger;
+        return $logger->$level($message, $context);
+    }
+}
+
+if (! function_exists('abort_if')) {
+    function abort_if(bool $condition, int $code, string $message = ''): void
+    {
+        if ($condition) abort($code, $message);
+    }
+}
+
+if (! function_exists('rescue')) {
+    function rescue(callable $callback, mixed $rescue = null, bool $report = true): mixed
+    {
+        try {
+            return $callback();
+        } catch (\Throwable $e) {
+            if ($report) report($e);
+            return value($rescue, $e);
+        }
+    }
+}
+
+if (! function_exists('retry')) {
+    function retry(int $times, callable $callback, int $sleepMs = 0): mixed
+    {
+        $attempts = 0;
+        while ($attempts < $times) {
+            $attempts++;
+            try {
+                return $callback($attempts);
+            } catch (\Throwable $e) {
+                if ($attempts >= $times) throw $e;
+                if ($sleepMs > 0) usleep($sleepMs * 1000);
+            }
+        }
+        return null;
+    }
+}
+
+if (! function_exists('tenant')) {
+    function tenant(?string $key = null): mixed
+    {
+        $manager = app('tenant');
+        if (is_null($key)) return $manager;
+        return $manager->id();
+    }
+}
+
+if (! function_exists('lang')) {
+    function lang(?string $key = null, array $replace = [], ?string $locale = null): mixed
+    {
+        if (is_null($key)) return app('translator');
+        return __($key, $replace, $locale);
+    }
+}
+
+if (! function_exists('encrypt')) {
+    function encrypt(mixed $value, bool $serialize = true): string
+    {
+        return app('encrypter')->encrypt($value, $serialize);
+    }
+}
+
+if (! function_exists('decrypt')) {
+    function decrypt(string $value, bool $unserialize = true): mixed
+    {
+        return app('encrypter')->decrypt($value, $unserialize);
+    }
+}
+
+if (! function_exists('gate')) {
+    function gate(): \Libxa\Auth\Access\Gate
+    {
+        return app('gate');
+    }
+}
+
+if (! function_exists('can')) {
+    function can(string $ability, mixed ...$arguments): bool
+    {
+        return gate()->check($ability, ...$arguments);
+    }
+}
+
+if (! function_exists('e')) {
+    function e(mixed $value, bool $doubleEncode = true): string
+    {
+        return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8', $doubleEncode);
+    }
+}
+
+if (! function_exists('sanitize')) {
+    function sanitize(string $value): string
+    {
+        return htmlspecialchars(strip_tags($value), ENT_QUOTES, 'UTF-8');
+    }
+}
+
+if (! function_exists('signed_url')) {
+    function signed_url(string $name, array $params = [], int $expiration = 3600): string
+    {
+        $url = route($name, $params);
+        $expires = time() + $expiration;
+        $signature = hash_hmac('sha256', $url . $expires, env('APP_KEY', 'secret'));
+        
+        $separator = str_contains($url, '?') ? '&' : '?';
+        return $url . $separator . 'expires=' . $expires . '&signature=' . $signature;
+    }
+}
+
+if (! function_exists('class_basename')) {
+    function class_basename(string|object $class): string
+    {
+        $class = is_object($class) ? get_class($class) : $class;
+        return basename(str_replace('\\', '/', $class));
+    }
+}
+
+if (! function_exists('action')) {
+    function action(string $controllerAction, array $params = []): string
+    {
+        // Simple mapping to route name by removing namespaces and formatting
+        $name = strtolower(str_replace(['\\', '@'], ['.', '.'], class_basename($controllerAction)));
+        return route($name, $params);
+    }
+}
+
+if (! function_exists('url')) {
+    function url(?string $path = null): string
+    {
+        $base = rtrim(env('APP_URL', 'http://localhost:8000'), '/');
+        
+        if (is_null($path)) {
+            // Return current URL
+            $uri = $_SERVER['REQUEST_URI'] ?? '/';
+            return $base . $uri;
+        }
+        
+        return $base . '/' . ltrim($path, '/');
     }
 }

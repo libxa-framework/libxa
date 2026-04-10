@@ -16,6 +16,8 @@ use Libxa\Foundation\Application as LibxaApplication;
  */
 class Application extends SymfonyApplication
 {
+    protected bool $discovered = false;
+    
     // ANSI colour codes
     private const C_RESET  = "\033[0m";
     private const C_BOLD   = "\033[1m";
@@ -27,7 +29,18 @@ class Application extends SymfonyApplication
     public function __construct(protected LibxaApplication $Libxa)
     {
         parent::__construct('LibxaFrame', LibxaApplication::VERSION);
-        $this->discoverCommands();
+    }
+
+    /**
+     * Override run to ensure commands are discovered before running
+     */
+    public function run(?InputInterface $input = null, ?OutputInterface $output = null): int
+    {
+        if (! $this->discovered) {
+            $this->discoverCommands();
+            $this->discovered = true;
+        }
+        return parent::run($input, $output);
     }
 
     /**
@@ -93,13 +106,14 @@ class Application extends SymfonyApplication
     //  Command Discovery
     // ─────────────────────────────────────────────────────────────────
 
-    protected function discoverCommands(): void
+    public function discoverCommands(): void
     {
         $this->addCommands([
             new Commands\ApiInstallCommand($this->Libxa),
             new Commands\MakeControllerCommand($this->Libxa),
             new Commands\MakeModuleCommand($this->Libxa),
             new Commands\MigrateCommand($this->Libxa),
+            new Commands\MigrateStatusCommand($this->Libxa),
             new Commands\ServeCommand($this->Libxa),
             new Commands\WsServeCommand($this->Libxa),
             new Commands\StorageLinkCommand($this->Libxa),
@@ -121,7 +135,59 @@ class Application extends SymfonyApplication
         // Auto-scan app/Console/Commands
         $appCommandsDir = $this->Libxa->appPath('Console/Commands');
         if (is_dir($appCommandsDir)) {
-            // Future: dynamic command discovery
+            $this->addFromDirectory($appCommandsDir);
         }
+        
+        // Load package commands from manifest
+        $packages = (new \Libxa\Module\ModuleManifestManager($this->Libxa, 'packages'))->load();
+        foreach ($packages as $package) {
+            $path = $package['path'] ?? null;
+            if ($path && is_dir($path . '/src/Console/Commands')) {
+                $this->addFromDirectory($path . '/src/Console/Commands');
+            }
+        }
+    }
+
+    /**
+     * Add all commands from a directory.
+     */
+    public function addFromDirectory(string $directory): void
+    {
+        if (! is_dir($directory)) {
+            return;
+        }
+
+        $files = glob($directory . '/*.php');
+        foreach ($files as $file) {
+            $className = $this->getClassNameFromFile($file);
+            if ($className && class_exists($className)) {
+                $command = new $className($this->Libxa);
+                $this->add($command);
+            }
+        }
+    }
+
+    /**
+     * Get the fully qualified class name from a file.
+     */
+    private function getClassNameFromFile(string $file): ?string
+    {
+        $content = file_get_contents($file);
+        
+        // Extract namespace
+        if (preg_match('/namespace\s+([\w\\\\]+);/i', $content, $matches)) {
+            $namespace = $matches[1];
+        } else {
+            return null;
+        }
+
+        // Extract class name
+        if (preg_match('/class\s+(\w+)/i', $content, $matches)) {
+            $className = $matches[1];
+        } else {
+            return null;
+        }
+
+        return $namespace . '\\' . $className;
     }
 }

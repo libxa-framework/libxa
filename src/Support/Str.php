@@ -225,6 +225,62 @@ class Str
         return (bool) preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $str);
     }
 
+    public static function pascal(string $str): string
+    {
+        return static::studly($str);
+    }
+
+    public static function mask(string $string, string $character, int $index, ?int $length = null): string
+    {
+        if ($character === '') {
+            return $string;
+        }
+
+        $segment = mb_substr($string, $index, $length, 'UTF-8');
+
+        if ($segment === '') {
+            return $string;
+        }
+
+        $strlen = mb_strlen($string, 'UTF-8');
+        $start = mb_substr($string, 0, $index, 'UTF-8');
+        $end = mb_substr($string, $index + mb_strlen($segment, 'UTF-8'), $strlen, 'UTF-8');
+
+        return $start . str_repeat($character, mb_strlen($segment, 'UTF-8')) . $end;
+    }
+
+    public static function match(string $pattern, string $subject): string
+    {
+        preg_match($pattern, $subject, $matches);
+        return $matches[1] ?? $matches[0] ?? '';
+    }
+
+    public static function ascii(string $value): string
+    {
+        return iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+    }
+
+    public static function toBase64(string $value): string
+    {
+        return base64_encode($value);
+    }
+
+    public static function ulid(): string
+    {
+        // Simple ULID-like generator for lightweight implemention
+        $time = (int) (microtime(true) * 1000);
+        $timeChars = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+        $res = '';
+        for ($i = 9; $i >= 0; $i--) {
+            $res = $timeChars[$time % 32] . $res;
+            $time = (int) ($time / 32);
+        }
+        for ($i = 0; $i < 16; $i++) {
+            $res .= $timeChars[random_int(0, 31)];
+        }
+        return $res;
+    }
+
     public static function of(string $str): StringableProxy
     {
         return new StringableProxy($str);

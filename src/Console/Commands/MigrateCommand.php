@@ -33,7 +33,7 @@ class MigrateCommand extends Command
         $migrator = new Migrator();
         
         // Add default migration path
-        $migrator->addPath($this->app->databasePath('migrations'));
+        $migrator->addPath($this->app->basePath('src/database/migrations'));
 
         // Scan modules for migrations
         $modulesPath = $this->app->basePath('src/app/Modules');
@@ -56,14 +56,32 @@ class MigrateCommand extends Command
 
         if ($input->getOption('rollback')) {
             $output->writeln("<comment>Rolling back migrations...</comment>");
-            $migrator->rollback();
-            $output->writeln("<info>Rollback complete.</info>");
+            $results = $migrator->rollback();
+            
+            if (empty($results)) {
+                $output->writeln("<info>Nothing to rollback.</info>");
+            } else {
+                foreach ($results as $migration) {
+                    $output->writeln("  <info>Rolling back:</info> {$migration}");
+                    $output->writeln("  <info>Rolled back:</info>  {$migration}");
+                }
+                $output->writeln("<info>" . count($results) . " migration(s) rolled back successfully.</info>");
+            }
             return Command::SUCCESS;
         }
 
         $output->writeln("<comment>Running migrations...</comment>");
-        $migrator->run();
-        $output->writeln("<info>Migrations complete.</info>");
+        $results = $migrator->run();
+        
+        if (empty($results)) {
+            $output->writeln("<info>Nothing to migrate.</info>");
+        } else {
+            foreach ($results as $migration) {
+                $output->writeln("  <info>Migrating:</info> {$migration}");
+                $output->writeln("  <info>Migrated:</info>  {$migration}");
+            }
+            $output->writeln("<info>" . count($results) . " migration(s) completed successfully.</info>");
+        }
 
         return Command::SUCCESS;
     }

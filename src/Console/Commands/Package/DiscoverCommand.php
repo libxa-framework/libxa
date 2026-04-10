@@ -42,9 +42,11 @@ class DiscoverCommand extends Command
             return Command::FAILURE;
         }
 
-        $io->text('Scanning vendor directory for Libxa-compatible packages...');
+        $io->text('Scanning vendor and packages directories for Libxa-compatible packages...');
 
         $packages = [];
+        
+        // Scan vendor directory (vendor/vendorname/packagename)
         $vendorDirs = array_filter(glob("$vendorPath/*"), 'is_dir');
 
         foreach ($vendorDirs as $vendorDir) {
@@ -62,6 +64,25 @@ class DiscoverCommand extends Command
                     
                     $packages[$packageName] = $config['extra']['Libxa'];
                     $packages[$packageName]['path'] = $packageDir;
+                }
+            }
+        }
+        
+        // Also scan packages directory directly (packages/packagename) - this will override vendor paths
+        $packagesPath = $this->Libxa->basePath('packages');
+        if (is_dir($packagesPath)) {
+            $packagesDirs = array_filter(glob("$packagesPath/*"), 'is_dir');
+            foreach ($packagesDirs as $packageDir) {
+                $composerJson = $packageDir . DIRECTORY_SEPARATOR . 'composer.json';
+                if (file_exists($composerJson)) {
+                    $config = json_decode(file_get_contents($composerJson), true);
+                    if (isset($config['extra']['Libxa'])) {
+                        $packageName = $config['name'] ?? basename($packageDir);
+                        $io->text("Discovered package: <info>{$packageName}</info>");
+                        $packages[$packageName] = $config['extra']['Libxa'];
+                        // Use the actual package directory path, not vendor path
+                        $packages[$packageName]['path'] = $packageDir;
+                    }
                 }
             }
         }

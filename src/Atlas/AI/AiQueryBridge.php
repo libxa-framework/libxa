@@ -174,6 +174,7 @@ class AiQueryBridge
             'openai'    => Drivers\OpenAiDriver::class,
             'anthropic' => Drivers\AnthropicDriver::class,
             'gemini'    => Drivers\GeminiDriver::class,
+            'test'      => Drivers\TestDriver::class,
         ];
 
         $class = $drivers[$provider] ?? null;
@@ -293,6 +294,8 @@ class OpenAiDriver implements \Libxa\Atlas\AI\AiDriverContract
             throw new \RuntimeException('Missing OPENAI_API_KEY in .env');
         }
 
+        $dbDriver = strtoupper($app->env('DB_DRIVER', 'sqlite'));
+
         $client = new Client([
             'headers' => [
                 'Authorization' => "Bearer {$key}",
@@ -300,7 +303,8 @@ class OpenAiDriver implements \Libxa\Atlas\AI\AiDriverContract
             ]
         ]);
 
-        $prompt = "Given this database schema:\n{$schemaContext}\n\nWrite a safe, read-only SQL SELECT query for the following request:\n\"{$question}\"\n\nReturn ONLY the SQL string, no markdown, no explanation.";
+        $prompt = "Given this database schema:\n{$schemaContext}\n\nWrite a safe, read-only $dbDriver SQL SELECT query for the following request:\n\"{$question}\"\n\nReturn ONLY the SQL string, no markdown, no explanation. Ensure functions and syntax are strict $dbDriver compatible.";
+
 
         $baseUrl = rtrim($app->env('AI_BASE_URL', 'https://api.openai.com/v1'), '/');
         $response = $client->post($baseUrl . '/chat/completions', [
@@ -312,9 +316,17 @@ class OpenAiDriver implements \Libxa\Atlas\AI\AiDriverContract
             'temperature' => 0,
         ]);
 
+        if (isset($response['body']['error'])) {
+            throw new \RuntimeException('AI API Error: ' . json_encode($response['body']['error']));
+        }
+
         $sql = $response['body']['choices'][0]['message']['content'] ?? '';
+        if ($sql === '') {
+            throw new \RuntimeException('AI API returned empty content: ' . json_encode($response['body']));
+        }
         
         return $this->cleanSql($sql);
+
     }
 
     public function generateScope(string $description, string $schemaContext): string
@@ -346,18 +358,22 @@ class OpenAiDriver implements \Libxa\Atlas\AI\AiDriverContract
 
     protected function cleanSql(string $sql): string
     {
-        $sql = trim($sql);
-        if (str_starts_with($sql, '```sql')) {
-            $sql = substr($sql, 6);
+        // Try to extract content inside ```sql ... ``` block
+        if (preg_match('/```sql\s*(.*?)\s*```/is', $sql, $matches)) {
+            $sql = $matches[1];
+        } elseif (preg_match('/```(.*?)```/is', $sql, $matches)) {
+            $sql = $matches[1];
+        } else {
+            // Find the first occurrence of SELECT to ignore conversational prefixes
+            $pos = stripos($sql, 'SELECT');
+            if ($pos !== false) {
+                $sql = substr($sql, $pos);
+            }
         }
-        if (str_starts_with($sql, '```')) {
-            $sql = substr($sql, 3);
-        }
-        if (str_ends_with($sql, '```')) {
-            $sql = substr($sql, 0, -3);
-        }
+        
         return trim($sql, " \t\n\r\0\x0B;");
     }
+
 }
 
 class AnthropicDriver implements \Libxa\Atlas\AI\AiDriverContract
@@ -383,5 +399,23 @@ class GeminiDriver implements \Libxa\Atlas\AI\AiDriverContract
     public function generateScope(string $description, string $schemaContext): string
     {
         throw new \RuntimeException('Gemini driver not yet implemented.');
+    }
+}
+
+class TestDriver implements \Libxa\Atlas\AI\AiDriverContract
+{
+    public function generateSql(string $question, string $schemaContext): string
+    {
+        // Simple heuristic for testing without making API calls
+        if (stripos($question, 'count') !== false) {
+            return "SELECT COUNT(*) FROM users;";
+        }
+        
+        return "SELECT * FROM users LIMIT 10;";
+    }
+
+    public function generateScope(string $description, string $schemaContext): string
+    {
+        return "return \$query->where('active', 1);";
     }
 }

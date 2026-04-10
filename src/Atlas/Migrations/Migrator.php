@@ -48,14 +48,9 @@ class Migrator
         $results = [];
 
         foreach ($pending as $file => $instance) {
-            echo "  Migrating: $file\n";
-
             $instance->up();
-
             $this->recordMigration($file, $batch);
             $results[] = $file;
-
-            echo "  Migrated:  $file ✓\n";
         }
 
         return $results;
@@ -71,14 +66,9 @@ class Migrator
 
             if ($instance === null) continue;
 
-            echo "  Rolling back: {$migration['migration']}\n";
-
             $instance->down();
-
             $this->deleteMigration($migration['migration']);
             $results[] = $migration['migration'];
-
-            echo "  Rolled back:  {$migration['migration']} ✓\n";
         }
 
         return $results;
@@ -130,12 +120,23 @@ class Migrator
             sort($files);
 
             foreach ($files as $file) {
-                require_once $file;
                 $name  = pathinfo($file, PATHINFO_FILENAME);
-                $class = $this->fileToClass($name);
-
-                if (class_exists($class)) {
-                    $migrations[$name] = new $class($this->pdo);
+                
+                // Check if it's an anonymous class migration (Libxa style)
+                $content = file_get_contents($file);
+                if (preg_match('/return\s+new\s+class/i', $content)) {
+                    // Anonymous class migration - load and instantiate
+                    $migration = require $file;
+                    if (is_object($migration) && method_exists($migration, 'up')) {
+                        $migrations[$name] = $migration;
+                    }
+                } else {
+                    // Class-based migration (Laravel style)
+                    require_once $file;
+                    $class = $this->fileToClass($name);
+                    if (class_exists($class)) {
+                        $migrations[$name] = new $class($this->pdo);
+                    }
                 }
             }
         }
@@ -182,7 +183,7 @@ class Migrator
         ");
     }
 
-    protected function getRanMigrations(): array
+    public function getRanMigrations(): array
     {
         return $this->pdo->query("SELECT migration FROM Libxa_migrations")
             ?->fetchAll(\PDO::FETCH_COLUMN) ?? [];

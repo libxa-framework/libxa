@@ -87,6 +87,14 @@ class QueueManager
     }
 
     /**
+     * Get a FiberWorker to process jobs concurrently.
+     */
+    public function fiber(): FiberWorker
+    {
+        return new FiberWorker();
+    }
+
+    /**
      * Dynamically call the default connection instance.
      */
     public function __call(string $method, array $parameters): mixed

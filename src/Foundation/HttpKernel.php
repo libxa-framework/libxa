@@ -22,6 +22,7 @@ class HttpKernel
 {
     /** Global middleware stack (applied to every request) */
     protected array $middleware = [
+        \Libxa\Multitenancy\Middleware\InitializeTenancy::class,
         \Libxa\Http\Middleware\TrimStringsMiddleware::class,
         \Libxa\Http\Middleware\CsrfMiddleware::class,
     ];
