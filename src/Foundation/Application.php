@@ -355,6 +355,18 @@ class Application extends Container
                 $this->register($provider);
             }
         }
+
+        // Load providers from config file
+        if (file_exists($this->configPath('app.php'))) {
+            $appConfig = require $this->configPath('app.php');
+            if (isset($appConfig['providers']) && is_array($appConfig['providers'])) {
+                foreach ($appConfig['providers'] as $provider) {
+                    if (class_exists($provider)) {
+                        $this->register($provider);
+                    }
+                }
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────
