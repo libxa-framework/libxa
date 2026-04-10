@@ -150,19 +150,16 @@ class Application extends SymfonyApplication
         // Load commands from Composer-installed packages (vendor/ directory)
         $vendorDir = $this->Libxa->basePath() . '/vendor';
         if (is_dir($vendorDir)) {
-            $installedJson = $vendorDir . '/composer/installed.json';
-            if (file_exists($installedJson)) {
-                $installed = json_decode(file_get_contents($installedJson), true);
-                $packages = $installed['packages'] ?? $installed;
-                foreach ($packages as $package) {
-                    $name = $package['name'] ?? '';
-                    $installPath = $package['install-path'] ?? null;
-                    
-                    // Only scan packages that might have commands (e.g., libxa/*)
-                    if ($installPath && (str_starts_with($name, 'libxa/') || str_starts_with($name, 'libxaframe/'))) {
-                        $fullPath = $vendorDir . '/' . $installPath;
-                        if (is_dir($fullPath . '/src/Console/Commands')) {
-                            $this->addFromDirectory($fullPath . '/src/Console/Commands');
+            // Scan libxa and libxaframe packages directly
+            $vendorPackages = ['libxa', 'libxaframe'];
+            foreach ($vendorPackages as $vendor) {
+                $vendorPath = $vendorDir . '/' . $vendor;
+                if (is_dir($vendorPath)) {
+                    $packageDirs = glob($vendorPath . '/*', GLOB_ONLYDIR);
+                    foreach ($packageDirs as $packagePath) {
+                        $commandsPath = $packagePath . '/src/Console/Commands';
+                        if (is_dir($commandsPath)) {
+                            $this->addFromDirectory($commandsPath);
                         }
                     }
                 }
