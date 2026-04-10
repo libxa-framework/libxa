@@ -41,6 +41,9 @@ class PublishCommand extends Command
         $provider = $input->getOption('provider');
         $force = $input->getOption('force');
 
+        // Boot the application to register service provider publishables
+        $this->Libxa->boot();
+
         $publishables = PublishableRegistry::all();
 
         if (empty($publishables)) {
