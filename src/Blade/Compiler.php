@@ -71,12 +71,18 @@ class Compiler
      */
     protected function compileInheritance(string $source): string
     {
-        // @extends('layouts.app')  →  sets $__layout and starts buffering
+        // @extends('layouts.app')  OR  @extends($variable)  →  sets $__layout and starts buffering
         $source = preg_replace_callback(
-            '/@extends\([\'"](.+?)[\'"]\)/',
+            '/@extends\(([\'"]?)(.+?)\1\)/',
             function (array $m): string {
-                $layout = addslashes($m[1]);
-                return "<?php \$__layout = '{$layout}'; \$__sections = []; ob_start(); ?>";
+                $isLiteral = $m[1] !== '';          // quoted → literal string
+                if ($isLiteral) {
+                    $layout = addslashes($m[2]);
+                    return "<?php \$__layout = '{$layout}'; \$__sections = []; ob_start(); ?>";
+                }
+                // Variable / expression → emit PHP that resolves at runtime
+                $expr = $m[2];
+                return "<?php \$__layout = {$expr}; \$__sections = []; ob_start(); ?>";
             },
             $source
         );
@@ -200,18 +206,23 @@ PHP;
         $expr = '\(((?:[^()]++|\([^()]*\))*)\)';
 
         $mappings = [
-            '/@if\s*' . $expr . '/'      => "<?php if($1): ?>",
-            '/@elseif\s*' . $expr . '/'  => "<?php elseif($1): ?>",
-            '/@else/'                    => "<?php else: ?>",
-            '/@endif/'                   => "<?php endif; ?>",
-            '/@foreach\s*' . $expr . '/' => "<?php foreach($1): ?>",
-            '/@endforeach/'              => "<?php endforeach; ?>",
-            '/@for\s*' . $expr . '/'     => "<?php for($1): ?>",
-            '/@endfor/'                  => "<?php endfor; ?>",
-            '/@while\s*' . $expr . '/'   => "<?php while($1): ?>",
-            '/@endwhile/'                => "<?php endwhile; ?>",
-            '/@php/'                     => "<?php",
-            '/@endphp/'                  => "?>",
+            '/@forelse\b\s*' . $expr . '/' => "<?php \$__empty_1 = true; foreach($1): \$__empty_1 = false; ?>",
+            '/@empty\b/'                  => "<?php endforeach; if(\$__empty_1): ?>",
+            '/@endforelse\b/'             => "<?php endif; ?>",
+            '/@if\b\s*' . $expr . '/'      => "<?php if($1): ?>",
+            '/@elseif\b\s*' . $expr . '/'  => "<?php elseif($1): ?>",
+            '/@else\b/'                    => "<?php else: ?>",
+            '/@endif\b/'                   => "<?php endif; ?>",
+            '/@foreach\b\s*' . $expr . '/' => "<?php foreach($1): ?>",
+            '/@endforeach\b/'              => "<?php endforeach; ?>",
+            '/@for\b\s*' . $expr . '/'     => "<?php for($1): ?>",
+            '/@endfor\b/'                  => "<?php endfor; ?>",
+            '/@while\b\s*' . $expr . '/'   => "<?php while($1): ?>",
+            '/@endwhile\b/'                => "<?php endwhile; ?>",
+            '/@php\b/'                     => "<?php",
+            '/@endphp\b/'                  => "?>",
+            '/@error\b\s*' . $expr . '/'  => "<?php if (errors()->has($1)): \$message = errors()->first($1); ?>",
+            '/@enderror\b/'                => "<?php endif; unset(\$message); ?>",
         ];
 
         foreach ($mappings as $pattern => $replace) {
@@ -257,9 +268,14 @@ PHP;
 
     protected function compileCustomDirectives(string $source): string
     {
-        foreach ($this->customDirectives as $name => $handler) {
+        // Sort by name length descending so longer names (e.g. 'livelibScripts')
+        // are matched before shorter prefix names (e.g. 'livelib').
+        $directives = $this->customDirectives;
+        uksort($directives, fn($a, $b) => strlen($b) - strlen($a));
+
+        foreach ($directives as $name => $handler) {
             $source = preg_replace_callback(
-                "/@{$name}(?:\((.+?)\))?/",
+                "/@{$name}(?:\\((.+?)\\))?(?=[^a-zA-Z]|$)/",
                 fn($m) => $handler($m[1] ?? null),
                 $source
             );

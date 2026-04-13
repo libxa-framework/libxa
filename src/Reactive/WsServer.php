@@ -281,12 +281,13 @@ class WsServer
 
         try {
             match ($message['type']) {
-                'mount'       => $this->handleMount($connection, $message),
-                'call'        => $this->handleCall($connection, $message),
-                'subscribe'   => $this->handleSubscribe($connection, $message),
-                'unsubscribe' => $this->handleUnsubscribe($connection, $message),
-                'ping'        => $this->send($connection, ['type' => 'pong']),
-                default       => $this->sendError($connection, "Unknown message type: {$message['type']}"),
+                'mount'           => $this->handleMount($connection, $message),
+                'call'            => $this->handleCall($connection, $message),
+                'update_property' => $this->handleCall($connection, $message),
+                'subscribe'       => $this->handleSubscribe($connection, $message),
+                'unsubscribe'     => $this->handleUnsubscribe($connection, $message),
+                'ping'            => $this->send($connection, ['type' => 'pong']),
+                default           => $this->sendError($connection, "Unknown message type: {$message['type']}"),
             };
         } catch (\Throwable $e) {
             $this->sendError($connection, $e->getMessage());
@@ -332,39 +333,60 @@ class WsServer
 
     /**
      * Mount a reactive component on a connection.
-     * Client sends: { type: 'mount', component: 'Counter', id: 'abc123', props: {} }
      */
     protected function handleMount(TcpConnection $connection, array $message): void
     {
         $class       = $message['component'] ?? null;
         $id          = $message['id'] ?? uniqid('rc_');
-        $props       = $message['props'] ?? [];
+        $props       = $message['props'] ?? $message['state'] ?? [];
+        $checksum    = $message['checksum'] ?? null;
 
-        if ($class === null || ! class_exists($class)) {
-            $this->sendError($connection, "Component [$class] not found.");
+        if ($class === null) {
+            $this->sendError($connection, "Component class not specified.");
             return;
         }
 
-        /** @var ReactiveComponent $component */
-        $component = new $class($props);
-        $component->mount($props);
+        try {
+            // Support for LiveLib discovery
+            if (class_exists(\Libxa\LiveLib\ComponentRegistry::class)) {
+                $class = \Libxa\LiveLib\ComponentRegistry::getClass($class);
+            }
 
-        $this->components[$connection->id][$id] = $component;
+            if (! class_exists($class)) {
+                $this->sendError($connection, "Component [$class] not found.");
+                return;
+            }
 
-        $snapshot = $component->toSnapshot();
+            /** @var \Libxa\LiveLib\ReactiveComponent|ReactiveComponent $component */
+            if ($checksum && class_exists(\Libxa\LiveLib\Hydration\Hydrator::class)) {
+                // Hydrate existing state
+                $component = \Libxa\LiveLib\Hydration\Hydrator::hydrate($class, $id, $props, $checksum);
+            } else {
+                // New mount
+                $component = new $class($props);
+                $component->id = $id;
+                $component->mount($props);
+            }
 
-        $this->send($connection, [
-            'type'      => 'snapshot',
-            'component' => $class,
-            'id'        => $id,
-            'state'     => $snapshot['state'],
-            'html'      => $snapshot['html'],
-        ]);
+            $this->components[$connection->id][$id] = $component;
+
+            $this->send($connection, [
+                'type'      => 'snapshot',
+                'id'        => $id,
+                'state'     => method_exists($component, 'getState') ? $component->getState() : $component->getPublicState(),
+                'checksum'  => class_exists(\Libxa\LiveLib\Hydration\Hydrator::class) && $component instanceof \Libxa\LiveLib\ReactiveComponent 
+                                ? \Libxa\LiveLib\Hydration\Hydrator::dehydrate($component)['checksum'] 
+                                : null,
+                'html'      => method_exists($component, 'renderHtml') ? $component->renderHtml() : $component->render(),
+            ]);
+
+        } catch (\Throwable $e) {
+            $this->sendError($connection, "Mount Error: " . $e->getMessage());
+        }
     }
 
     /**
      * Call a method on an already-mounted component.
-     * Client sends: { type: 'call', id: 'abc123', method: 'increment', params: [] }
      */
     protected function handleCall(TcpConnection $connection, array $message): void
     {
@@ -373,31 +395,55 @@ class WsServer
         $params = $message['params'] ?? [];
 
         if ($id === null || ! isset($this->components[$connection->id][$id])) {
-            $this->sendError($connection, "Component [$id] not mounted on this connection.");
+            $this->sendError($connection, "Component [$id] not mounted.");
             return;
         }
 
-        /** @var ReactiveComponent $component */
-        $component  = $this->components[$connection->id][$id];
-        $beforeHtml = $component->renderHtml();
+        /** @var \Libxa\LiveLib\ReactiveComponent|ReactiveComponent $component */
+        $component = $this->components[$connection->id][$id];
 
-        // Call the method on the component
-        if (! method_exists($component, $method)) {
-            $this->sendError($connection, "Method [$method] not found on component.");
-            return;
+        try {
+            if ($message['type'] === 'update_property') {
+                $prop = $message['property'];
+                $val  = $message['value'];
+                
+                if (method_exists($component, 'updating')) $component->updating($prop, $val);
+                $component->$prop = $val;
+                if (method_exists($component, 'updated')) $component->updated($prop, $val);
+            } else {
+                if (! method_exists($component, $method)) {
+                    $this->sendError($connection, "Method [$method] not found.");
+                    return;
+                }
+                $component->$method(...(array) $params);
+            }
+
+            $html = method_exists($component, 'renderHtml') ? $component->renderHtml() : $component->render();
+            $state = method_exists($component, 'getState') ? $component->getState() : $component->getPublicState();
+            
+            $response = [
+                'type'  => 'patch',
+                'id'    => $id,
+                'state' => $state,
+                'html'  => $html, // For now, send full HTML, JS client handles morphing
+            ];
+
+            if (class_exists(\Libxa\LiveLib\Hydration\Hydrator::class) && $component instanceof \Libxa\LiveLib\ReactiveComponent) {
+                $response['checksum'] = \Libxa\LiveLib\Hydration\Hydrator::dehydrate($component)['checksum'];
+            }
+
+            // Handle dispatched events
+            if (method_exists($component, 'pullDispatched')) {
+                foreach ($component->pullDispatched() as $event) {
+                    $this->send($connection, ['type' => 'event', 'event' => $event['event'], 'data' => $event['data']]);
+                }
+            }
+
+            $this->send($connection, $response);
+
+        } catch (\Throwable $e) {
+            $this->sendError($connection, "Call Error: " . $e->getMessage());
         }
-
-        $component->$method(...(array) $params);
-
-        $afterHtml = $component->renderHtml();
-        $diff      = DiffEngine::diff($beforeHtml, $afterHtml);
-
-        $this->send($connection, [
-            'type'      => 'patch',
-            'id'        => $id,
-            'diff'      => $diff,
-            'state'     => $component->getPublicState(),
-        ]);
     }
 
     /**

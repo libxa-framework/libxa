@@ -63,6 +63,21 @@ class BladeEngine
     }
 
     /**
+     * Render a raw Blade template string.
+     */
+    public function renderString(string $source, array $data = []): string
+    {
+        $cachePath = $this->cachePath . '/string_' . sha1($source) . '.php';
+
+        if (! file_exists($cachePath)) {
+            $compiled = $this->compiler->compile($source);
+            file_put_contents($cachePath, $compiled);
+        }
+
+        return $this->evaluateView($cachePath, $data);
+    }
+
+    /**
      * Render a layout view with pre-captured sections from a child template.
      * Called by compiled child templates when they use @extends.
      */
@@ -86,15 +101,18 @@ class BladeEngine
 
     /**
      * Evaluate a compiled view file in an isolated scope.
+     *
+     * Internal variables are prefixed with __ to avoid collision with
+     * user-provided view data (mirrors Laravel's PhpEngine approach).
      */
-    protected function evaluateView(string $path, array $data): string
+    protected function evaluateView(string $__path, array $__data): string
     {
-        extract($data, EXTR_SKIP);
+        extract($__data, EXTR_SKIP);
 
         ob_start();
 
         try {
-            include $path;
+            include $__path;
         } catch (\Throwable $e) {
             ob_end_clean();
             throw $e;

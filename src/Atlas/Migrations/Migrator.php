@@ -223,18 +223,3 @@ class Migrator
     }
 }
 
-/**
- * Base Migration class — all migration files extend this.
- */
-abstract class Migration
-{
-    protected SchemaBuilder $schema;
-
-    public function __construct(protected \PDO $pdo)
-    {
-        $this->schema = new SchemaBuilder($this->pdo);
-    }
-
-    abstract public function up(): void;
-    abstract public function down(): void;
-}

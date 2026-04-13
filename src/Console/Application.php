@@ -111,6 +111,8 @@ class Application extends SymfonyApplication
         $this->addCommands([
             new Commands\ApiInstallCommand($this->Libxa),
             new Commands\MakeControllerCommand($this->Libxa),
+            new Commands\MakeAdminWidgetCommand($this->Libxa),
+            new Commands\MakeAdminPageCommand($this->Libxa),
             new Commands\MakeModuleCommand($this->Libxa),
             new Commands\MigrateCommand($this->Libxa),
             new Commands\MigrateStatusCommand($this->Libxa),

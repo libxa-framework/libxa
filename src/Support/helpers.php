@@ -167,7 +167,22 @@ if (! function_exists('csrf_field')) {
 if (! function_exists('old')) {
     function old(?string $key = null, mixed $default = ''): mixed
     {
-        return $_SESSION['_old_input'][$key] ?? $default;
+        return $_SESSION['_flash']['old']['old'][$key] ?? $default;
+    }
+}
+
+if (! function_exists('errors')) {
+    /**
+     * Get the validation error bag.
+     */
+    function errors(): \Libxa\Validation\MessageBag
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        $errors = $_SESSION['_flash']['old']['errors'] ?? [];
+        return new \Libxa\Validation\MessageBag((array) $errors);
     }
 }
 
@@ -520,15 +535,6 @@ if (! function_exists('ai')) {
     }
 }
 
-if (! function_exists('storage')) {
-    /**
-     * Get the storage manager instance.
-     */
-    function storage(): \Libxa\Storage\StorageManager
-    {
-        return app('storage');
-    }
-}
 
 if (! function_exists('vite')) {
     /**
@@ -540,12 +546,20 @@ if (! function_exists('vite')) {
     }
 }
 
-if (! function_exists('log')) {
-    function log(?string $message = null, array $context = [], string $level = 'info'): mixed
+if (! function_exists('logger')) {
+    function logger(?string $message = null, array $context = [], string $level = 'info'): mixed
     {
-        $logger = app('logger');
-        if (is_null($message)) return $logger;
-        return $logger->$level($message, $context);
+        try {
+            $logger = app('logger');
+            if (is_null($message)) return $logger;
+            return $logger->$level($message, $context);
+        } catch (\Throwable $e) {
+            // Fallback to error_log if the logger service is not bound
+            if (!is_null($message)) {
+                error_log(sprintf("[%s] %s %s", strtoupper($level), $message, json_encode($context)));
+            }
+            return null;
+        }
     }
 }
 

@@ -144,6 +144,28 @@ class QueryBuilder
     public function take(int $n): static   { return $this->limit($n); }
     public function skip(int $n): static   { return $this->offset($n); }
 
+    public function getTable(): string
+    {
+        return $this->table;
+    }
+
+    public function getModel(): string
+    {
+        return $this->model;
+    }
+
+    public function getPrimaryKey(): string
+    {
+        // Guess primary key from model if available, default to 'id'
+        if (class_exists($this->model)) {
+            $instance = new $this->model();
+            if (method_exists($instance, 'getPrimaryKey')) {
+                return $instance->getPrimaryKey();
+            }
+        }
+        return 'id';
+    }
+
     // ─────────────────────────────────────────────────────────────────
     //  JOIN
     // ─────────────────────────────────────────────────────────────────
@@ -287,6 +309,11 @@ class QueryBuilder
         $stmt     = $this->getPdo()->prepare($sql);
 
         return $stmt->execute($bindings);
+    }
+
+    public function delete(): bool
+    {
+        return $this->deleteRecord();
     }
 
     public function deleteRecord(): bool

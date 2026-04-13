@@ -64,3 +64,82 @@ jobs:
 
       - name: 🧪 Validate Zero-Config Tenancy
         run: vendor/bin/phpunit tests/TenancyTest.php
+
+      - name: 🧪 Validate LiveLib Reactive Engine
+        run: |
+          vendor/bin/phpunit tests/LiveLibTest.php
+          if [ -d "packages/livelib" ]; then
+            echo "Linting LiveLib..."
+            php -l packages/livelib/src/*.php
+            php -l packages/livelib/src/**/*.php
+          fi
+
+      - name: 🎨 Validate LibAdmin Executive Lens UI
+        run: |
+          echo "=== Linting LibAdmin Configuration Registry ==="
+          php -l packages/lib-admin/src/Panel/AdminPanel.php
+          php -l packages/lib-admin/src/Pages/Page.php
+          php -l packages/lib-admin/src/Http/Controllers/PageController.php
+          php -l packages/lib-admin/stubs/AdminPanelProvider.stub
+          php -l src/app/Admin/Pages/SettingsPage.php
+          
+          echo "=== Linting LibAdmin Field Classes ==="
+          php -l packages/lib-admin/src/Fields/AdminField.php
+          php -l packages/lib-admin/src/Fields/TextInput.php
+          php -l packages/lib-admin/src/Fields/Select.php
+          php -l packages/lib-admin/src/Fields/Textarea.php
+          php -l packages/lib-admin/src/Fields/Toggle.php
+          php -l packages/lib-admin/src/Fields/BelongsToField.php
+          php -l packages/lib-admin/src/Fields/MultiSelect.php
+          php -l packages/lib-admin/src/Fields/FileField.php
+          php -l packages/lib-admin/src/Fields/ColorPicker.php
+
+          echo "=== Linting LibAdmin Column Classes ==="
+          php -l packages/lib-admin/src/Columns/AdminColumn.php
+          php -l packages/lib-admin/src/Columns/TextColumn.php
+
+          echo "=== Asserting Blade view files exist ==="
+          VIEWS="packages/lib-admin/src/Resources/views"
+          for f in \
+            "$VIEWS/layouts/admin.blade.php" \
+            "$VIEWS/auth/login.blade.php" \
+            "$VIEWS/dashboard.blade.php" \
+            "$VIEWS/resources/index.blade.php" \
+            "$VIEWS/resources/create.blade.php" \
+            "$VIEWS/resources/edit.blade.php" \
+            "$VIEWS/resources/show.blade.php" \
+            "$VIEWS/fields/text.blade.php" \
+            "$VIEWS/fields/textarea.blade.php" \
+            "$VIEWS/fields/select.blade.php" \
+            "$VIEWS/fields/toggle.blade.php" \
+            "$VIEWS/fields/belongs-to.blade.php" \
+            "$VIEWS/fields/multi-select.blade.php" \
+            "$VIEWS/fields/color-picker.blade.php" \
+            "$VIEWS/columns/text.blade.php" \
+            "$VIEWS/columns/badge.blade.php" \
+            "$VIEWS/columns/image.blade.php"; do
+            if [ -f "$f" ]; then
+              echo "✅  $f"
+            else
+              echo "❌  MISSING: $f" && exit 1
+            fi
+          done
+
+          echo "=== Linting App Blog Resources ==="
+          php -l src/app/Admin/Resources/UserResource.php
+          php -l src/app/Admin/Resources/PostResource.php
+          php -l src/app/Admin/Resources/TagResource.php
+          php -l src/app/Admin/Resources/CommentResource.php
+          php -l src/app/Admin/Resources/CategoryResource.php
+
+          echo "=== Linting Atlas Relationship Classes ==="
+          php -l framework/src/Atlas/Relations/Relation.php
+          php -l framework/src/Atlas/Relations/HasOne.php
+          php -l framework/src/Atlas/Relations/HasMany.php
+          php -l framework/src/Atlas/Relations/BelongsTo.php
+          php -l framework/src/Atlas/Relations/BelongsToMany.php
+          php -l framework/src/Atlas/Relations/MorphOne.php
+          php -l framework/src/Atlas/Relations/MorphMany.php
+          php -l framework/src/Atlas/Relations/MorphTo.php
+
+          echo "=== LibAdmin UI validation complete ✅ ==="

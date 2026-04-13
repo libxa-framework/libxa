@@ -78,6 +78,27 @@ class Router
         return $this->addRoute(array_map('strtoupper', $methods), $uri, $action);
     }
 
+    /**
+     * Register a full-page LiveLib reactive component route.
+     */
+    public function livelib(string $uri, string $component): Route
+    {
+        return $this->get($uri, function () use ($component) {
+            $compiler = $this->app->make('blade');
+            $request  = $this->app->make('request');
+            $route    = $request->getAttribute('_route');
+            $params   = $route ? $route->getParameters() : [];
+            
+            // Try to find a default layout
+            $layout = "layouts.app";
+            
+            // Pass parameters as an associative array to the directive
+            $template = "@extends('$layout')\n@section('content')\n    @livelib('$component', \$params)\n@endsection";
+            
+            return $compiler->renderString($template, ['params' => $params]);
+        });
+    }
+
     // ─────────────────────────────────────────────────────────────────
     //  Resource Routes
     // ─────────────────────────────────────────────────────────────────
@@ -307,6 +328,7 @@ class Router
         $action     = $route->getAction();
         $parameters = $route->getParameters();
 
+        $request->setAttribute('_route', $route);
         $this->app->instance('request', $request);
 
         if ($action instanceof \Closure) {

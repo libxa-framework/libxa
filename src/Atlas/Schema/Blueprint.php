@@ -208,7 +208,13 @@ class Blueprint
             return $col instanceof ColumnDefinition ? $col->toSql() : $col;
         }, $this->columns);
 
-        return "$verb {$exists}`{$this->table}` (\n  " . implode(",\n  ", array_filter($cols)) . "\n)";
+        $foreigns = array_map(function ($f) {
+            return $f->toSql();
+        }, $this->foreigns);
+
+        $all = array_merge($cols, $foreigns);
+
+        return "$verb {$exists}`{$this->table}` (\n  " . implode(",\n  ", array_filter($all)) . "\n)";
     }
 
     public function build(): void
@@ -257,6 +263,12 @@ class ColumnDefinition
     {
         $this->blueprint->index($this->name);
         return $this;
+    }
+
+    public function constrained(?string $table = null, string $column = 'id'): ForeignKeyDefinition
+    {
+        $table = $table ?? str_replace('_id', 's', $this->name);
+        return $this->blueprint->foreign($this->name)->references($column)->on($table);
     }
 
     public function toSql(): string

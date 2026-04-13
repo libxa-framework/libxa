@@ -42,7 +42,18 @@ class UploadedFile
 
     public function isValid(): bool
     {
-        return $this->error === \UPLOAD_ERR_OK && is_uploaded_file($this->tmpName);
+        if ($this->error !== \UPLOAD_ERR_OK) {
+            return false;
+        }
+
+        // Standard PHP upload check
+        if (is_uploaded_file($this->tmpName)) {
+            return true;
+        }
+
+        // If it was already moved by our framework (persistent token), 
+        // we check if it still exists in our internal storage.
+        return file_exists($this->tmpName);
     }
 
     public function storePosition(string $path, string $fileName): string|false
@@ -59,7 +70,18 @@ class UploadedFile
 
         $target = rtrim($directory, '/') . '/' . ltrim($fileName, '/');
 
-        if (move_uploaded_file($this->tmpName, $target)) {
+        // Choose move method based on whether it's a fresh PHP upload or a persistent file
+        if (is_uploaded_file($this->tmpName)) {
+            $success = move_uploaded_file($this->tmpName, $target);
+        } else {
+            // For persistent files, we copy then delete to simulate moving across disks if needed
+            $success = copy($this->tmpName, $target);
+            if ($success) {
+                unlink($this->tmpName);
+            }
+        }
+
+        if ($success) {
             return ltrim($path, '/') . '/' . ltrim($fileName, '/');
         }
 

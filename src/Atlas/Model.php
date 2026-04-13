@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace Libxa\Atlas;
 
 use Libxa\Atlas\Connection\ConnectionPool;
+use Libxa\Atlas\Relations\HasOne;
 use Libxa\Atlas\Relations\HasMany;
 use Libxa\Atlas\Relations\BelongsTo;
 use Libxa\Atlas\Relations\BelongsToMany;
+use Libxa\Atlas\Relations\MorphOne;
+use Libxa\Atlas\Relations\MorphMany;
+use Libxa\Atlas\Relations\MorphTo;
 use Libxa\Foundation\Application;
 
 /**
@@ -389,31 +393,78 @@ abstract class Model
     }
 
     // ─────────────────────────────────────────────────────────────────
-    //  Relations (shortcuts)
+    //  Relations (Fluent Engine)
     // ─────────────────────────────────────────────────────────────────
 
-    protected function hasMany(string $related, string $foreignKey = '', string $localKey = ''): array
+    protected function hasMany(string $related, string $foreignKey = '', string $localKey = ''): HasMany
     {
+        $instance   = new $related();
         $foreignKey = $foreignKey ?: $this->guessTable() . '_id';
         $localKey   = $localKey   ?: $this->primaryKey;
 
-        return $related::where($foreignKey, $this->getAttribute($localKey))->get();
+        return new HasMany($instance->query(), $this, $foreignKey, $localKey);
     }
 
-    protected function belongsTo(string $related, string $foreignKey = '', string $ownerKey = ''): ?object
+    protected function belongsTo(string $related, string $foreignKey = '', string $ownerKey = ''): BelongsTo
     {
+        $instance   = new $related();
         $foreignKey = $foreignKey ?: strtolower((new \ReflectionClass($related))->getShortName()) . '_id';
-        $ownerKey   = $ownerKey   ?: (new $related)->primaryKey;
+        $ownerKey   = $ownerKey   ?: $instance->primaryKey;
 
-        return $related::find($this->getAttribute($foreignKey));
+        return new BelongsTo($instance->query(), $this, $foreignKey, $ownerKey);
     }
 
-    protected function hasOne(string $related, string $foreignKey = '', string $localKey = ''): ?object
+    protected function hasOne(string $related, string $foreignKey = '', string $localKey = ''): HasOne
     {
+        $instance   = new $related();
         $foreignKey = $foreignKey ?: $this->guessTable() . '_id';
         $localKey   = $localKey   ?: $this->primaryKey;
 
-        return $related::where($foreignKey, $this->getAttribute($localKey))->first();
+        return new HasOne($instance->query(), $this, $foreignKey, $localKey);
+    }
+
+    protected function belongsToMany(string $related, string $pivotTable = '', string $foreignPivotKey = '', string $relatedPivotKey = ''): BelongsToMany
+    {
+        $instance = new $related();
+
+        // Guess pivot table name alphabetically
+        if ($pivotTable === '') {
+            $tables = [$this->getTable(), $instance->getTable()];
+            sort($tables);
+            $pivotTable = strtolower($tables[0] . '_' . $tables[1]);
+        }
+
+        $foreignPivotKey = $foreignPivotKey ?: $this->guessTable() . '_id';
+        $relatedPivotKey = $relatedPivotKey ?: $instance->guessTable() . '_id';
+
+        return new BelongsToMany($instance->query(), $this, $pivotTable, $foreignPivotKey, $relatedPivotKey);
+    }
+
+    protected function morphTo(?string $name = null, ?string $type = null, ?string $id = null): MorphTo
+    {
+        $name = $name ?: debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2)[1]['function'];
+        $type = $type ?: $name . '_type';
+        $id   = $id   ?: $name . '_id';
+
+        return new MorphTo($this->query(), $this, $type, $id);
+    }
+
+    protected function morphOne(string $related, string $name, ?string $type = null, ?string $id = null): MorphOne
+    {
+        $instance = new $related();
+        $type     = $type ?: $name . '_type';
+        $id       = $id   ?: $name . '_id';
+
+        return new MorphOne($instance->query(), $this, $type, $id);
+    }
+
+    protected function morphMany(string $related, string $name, ?string $type = null, ?string $id = null): MorphMany
+    {
+        $instance = new $related();
+        $type     = $type ?: $name . '_type';
+        $id       = $id   ?: $name . '_id';
+
+        return new MorphMany($instance->query(), $this, $type, $id);
     }
 
     // ─────────────────────────────────────────────────────────────────

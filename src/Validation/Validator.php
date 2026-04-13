@@ -114,6 +114,11 @@ class Validator
             'ip'         => $this->validateIp($field, $value),
             'starts_with'=> $this->validateStartsWith($field, $value, $param),
             'ends_with'  => $this->validateEndsWith($field, $value, $param),
+            'file'       => $this->validateFile($field, $value),
+            'image'      => $this->validateImage($field, $value),
+            'mimes'      => $this->validateMimes($field, $value, $param),
+            'max_size'   => $this->validateMaxSize($field, $value, (int) $param),
+            'dimensions' => $this->validateDimensions($field, $value, $param),
             default      => null,
         };
     }
@@ -304,6 +309,61 @@ class Validator
     protected function validateEndsWith(string $f, mixed $v, string $suffix): void
     {
         if ($v && ! str_ends_with((string) $v, $suffix)) $this->fail($f, 'ends_with', "The $f must end with $suffix.");
+    }
+
+    protected function validateFile(string $f, mixed $v): void
+    {
+        $type = is_object($v) ? get_class($v) : gettype($v);
+        logger("VALIDATING FILE for field [$f]. Type: " . $type, [], 'info');
+
+        if ($v instanceof \Libxa\Http\UploadedFile) {
+            if (!$v->isValid()) {
+                logger("FILE INVALID for field [$f]. Status: " . ($v->isValid() ? 'valid' : 'invalid'), [], 'warning');
+                $this->fail($f, 'file', "The $f must be a valid uploaded file.");
+            }
+            return;
+        }
+
+        if ($v !== null) {
+            logger("FILE VALIDATION FAILED for field [$f]. Value is not an UploadedFile instance.", [], 'error');
+            $this->fail($f, 'file', "The $f must be a file.");
+        }
+    }
+
+    protected function validateImage(string $f, mixed $v): void
+    {
+        if ($v instanceof \Libxa\Http\UploadedFile) {
+            $mimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
+            if (!in_array($v->getMimeType(), $mimes)) {
+                $this->fail($f, 'image', "The $f must be an image (jpeg, png, gif, webp, svg).");
+            }
+            return;
+        }
+        $this->validateFile($f, $v);
+    }
+
+    protected function validateMimes(string $f, mixed $v, ?string $param): void
+    {
+        if (!$v instanceof \Libxa\Http\UploadedFile || !$param) return;
+        $allowed = explode(',', $param);
+        $ext = $v->getClientOriginalExtension();
+        if (!in_array(strtolower($ext), $allowed)) {
+            $this->fail($f, 'mimes', "The $f must be a file of type: $param.");
+        }
+    }
+
+    protected function validateMaxSize(string $f, mixed $v, int $maxKb): void
+    {
+        if (!$v instanceof \Libxa\Http\UploadedFile) return;
+        if ($v->getSize() > ($maxKb * 1024)) {
+            $this->fail($f, 'max_size', "The $f may not be greater than $maxKb kilobytes.");
+        }
+    }
+
+    protected function validateDimensions(string $f, mixed $v, ?string $param): void
+    {
+        // Basic stub for now, would usually require getimagesize()
+        if (!$v instanceof \Libxa\Http\UploadedFile) return;
     }
 
     // ─────────────────────────────────────────────────────────────────
