@@ -278,6 +278,18 @@ class Request
     //  Attributes (set by router / middleware)
     // ─────────────────────────────────────────────────────────────────
 
+    /**
+     * Merge new data into the request's input (post + query).
+     * Existing keys are overwritten; unknown keys are added.
+     */
+    public function merge(array $data): static
+    {
+        $this->post  = array_merge($this->post,  $data);
+        $this->query = array_merge($this->query, $data);
+
+        return $this;
+    }
+
     public function setAttribute(string $key, mixed $value): void
     {
         $this->attributes[$key] = $value;
