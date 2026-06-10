@@ -396,24 +396,3 @@ class Validator
     public function validated(): array { return $this->validated; }
 }
 
-/**
- * Validation Exception — thrown when $request->validate() fails.
- */
-class ValidationException extends \RuntimeException
-{
-    public function __construct(
-        protected array $errors,
-        string $message = 'The given data was invalid.',
-        int $code = 422,
-    ) {
-        parent::__construct($message, $code);
-    }
-
-    public function errors(): array { return $this->errors; }
-    public function status(): int   { return 422; }
-
-    public function toResponse(): \Libxa\Http\JsonResponse
-    {
-        return \Libxa\Http\JsonResponse::error('The given data was invalid.', 422, $this->errors);
-    }
-}
