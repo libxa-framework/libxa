@@ -66,4 +66,44 @@ class MessageBag
     {
         return ! $this->isEmpty();
     }
+
+    /**
+     * Get the messages as an array (alias for all()).
+     */
+    public function toArray(): array
+    {
+        return $this->messages;
+    }
+
+    /**
+     * Merge another bag's messages into this one.
+     */
+    public function merge(array|MessageBag $messages): static
+    {
+        $data = $messages instanceof MessageBag ? $messages->all() : $messages;
+        foreach ($data as $key => $value) {
+            $this->messages[$key] = array_merge(
+                $this->messages[$key] ?? [],
+                (array) $value
+            );
+        }
+        return $this;
+    }
+
+    /**
+     * Add a message for a key.
+     */
+    public function add(string $key, string $message): static
+    {
+        $this->messages[$key][] = $message;
+        return $this;
+    }
+
+    /**
+     * Count total messages.
+     */
+    public function count(): int
+    {
+        return array_sum(array_map('count', array_map(fn($v) => (array)$v, $this->messages)));
+    }
 }

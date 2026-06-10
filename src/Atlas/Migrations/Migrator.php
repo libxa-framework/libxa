@@ -5,19 +5,12 @@ declare(strict_types=1);
 namespace Libxa\Atlas\Migrations;
 
 use Libxa\Atlas\Connection\ConnectionPool;
-use Libxa\Atlas\Schema\SchemaBuilder;
 
 /**
  * Atlas Migrator
  *
  * Discovers and runs migration files.
- * Tracks which migrations have been run in a `Libxa_migrations` table.
- *
- * Commands:
- *   php Libxa migrate             — Run pending migrations
- *   php Libxa migrate:rollback    — Rollback the last batch
- *   php Libxa migrate:fresh       — Drop all tables and re-run
- *   php Libxa schema:diff         — Detect drift between models and DB
+ * Tracks which migrations have been run in a `libxa_migrations` table.
  */
 class Migrator
 {
@@ -76,17 +69,52 @@ class Migrator
 
     public function fresh(array $paths = []): void
     {
-        // Drop all tables
-        $tables = $this->pdo->query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence'"
-        )?->fetchAll(\PDO::FETCH_COLUMN) ?? [];
-
-        foreach ($tables as $table) {
-            $this->pdo->exec("DROP TABLE IF EXISTS `$table`");
-        }
-
+        $this->dropAllTables();
         $this->ensureMigrationsTable();
         $this->run($paths);
+    }
+
+    protected function dropAllTables(): void
+    {
+        $driver = $this->pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+
+        switch ($driver) {
+            case 'sqlite':
+                $tables = $this->pdo->query(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                )?->fetchAll(\PDO::FETCH_COLUMN) ?? [];
+
+                $this->pdo->exec('PRAGMA foreign_keys = OFF');
+                foreach ($tables as $table) {
+                    $this->pdo->exec("DROP TABLE IF EXISTS \"$table\"");
+                }
+                $this->pdo->exec('PRAGMA foreign_keys = ON');
+                break;
+
+            case 'mysql':
+                $db     = $this->pdo->query('SELECT DATABASE()')->fetchColumn();
+                $tables = $this->pdo->query("SHOW TABLES")?->fetchAll(\PDO::FETCH_COLUMN) ?? [];
+
+                $this->pdo->exec('SET FOREIGN_KEY_CHECKS=0');
+                foreach ($tables as $table) {
+                    $this->pdo->exec("DROP TABLE IF EXISTS `$table`");
+                }
+                $this->pdo->exec('SET FOREIGN_KEY_CHECKS=1');
+                break;
+
+            case 'pgsql':
+                $tables = $this->pdo->query(
+                    "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+                )?->fetchAll(\PDO::FETCH_COLUMN) ?? [];
+
+                foreach ($tables as $table) {
+                    $this->pdo->exec("DROP TABLE IF EXISTS \"$table\" CASCADE");
+                }
+                break;
+
+            default:
+                throw new \RuntimeException("Unsupported driver for fresh migration: $driver");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -99,10 +127,8 @@ class Migrator
         $pending = [];
 
         foreach ($all as $file => $instance) {
-            $name = pathinfo($file, PATHINFO_FILENAME);
-
-            if (! in_array($name, $ran)) {
-                $pending[$name] = $instance;
+            if (! in_array($file, $ran)) {
+                $pending[$file] = $instance;
             }
         }
 
@@ -120,18 +146,17 @@ class Migrator
             sort($files);
 
             foreach ($files as $file) {
-                $name  = pathinfo($file, PATHINFO_FILENAME);
-                
-                // Check if it's an anonymous class migration (Libxa style)
+                $name    = pathinfo($file, PATHINFO_FILENAME);
                 $content = file_get_contents($file);
+
                 if (preg_match('/return\s+new\s+class/i', $content)) {
-                    // Anonymous class migration - load and instantiate
+                    // Anonymous class migration
                     $migration = require $file;
                     if (is_object($migration) && method_exists($migration, 'up')) {
                         $migrations[$name] = $migration;
                     }
                 } else {
-                    // Class-based migration (Laravel style)
+                    // Named class migration
                     require_once $file;
                     $class = $this->fileToClass($name);
                     if (class_exists($class)) {
@@ -146,46 +171,75 @@ class Migrator
 
     protected function resolveMigration(string $name, array $paths): ?object
     {
-        foreach ($paths as $path) {
-            $file  = "$path/$name.php";
-            $class = $this->fileToClass($name);
+        $allPaths = array_merge($this->paths, $paths);
 
-            if (file_exists($file)) {
-                require_once $file;
-                return class_exists($class) ? new $class($this->pdo) : null;
+        foreach ($allPaths as $path) {
+            $file = "$path/$name.php";
+
+            if (! file_exists($file)) continue;
+
+            $content = file_get_contents($file);
+
+            if (preg_match('/return\s+new\s+class/i', $content)) {
+                $migration = require $file;
+                if (is_object($migration) && method_exists($migration, 'down')) {
+                    return $migration;
+                }
+            }
+
+            require_once $file;
+            $class = $this->fileToClass($name);
+            if (class_exists($class)) {
+                return new $class($this->pdo);
             }
         }
+
         return null;
     }
 
     protected function fileToClass(string $filename): string
     {
-        // 2024_01_01_000000_create_users_table → CreateUsersTable
         $parts = explode('_', $filename);
-        // Skip date/time prefix (first 4 segments)
+        // Skip date/time prefix (first 4 segments: YYYY_MM_DD_HHMMSS)
         $name  = implode('_', array_slice($parts, 4));
         return str_replace('_', '', ucwords($name, '_'));
     }
 
     // ─────────────────────────────────────────────────────────────────
-    //  Migration tracking
+    //  Migrations table
     // ─────────────────────────────────────────────────────────────────
 
     protected function ensureMigrationsTable(): void
     {
-        $this->pdo->exec("
-            CREATE TABLE IF NOT EXISTS Libxa_migrations (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                migration VARCHAR(255) NOT NULL,
-                batch     INTEGER NOT NULL,
-                ran_at    DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ");
+        $driver = $this->pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+
+        $sql = match ($driver) {
+            'mysql'  => "CREATE TABLE IF NOT EXISTS `libxa_migrations` (
+                            `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                            `migration` VARCHAR(255) NOT NULL,
+                            `batch`     INT NOT NULL,
+                            `ran_at`    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+            'pgsql'  => "CREATE TABLE IF NOT EXISTS libxa_migrations (
+                            id        SERIAL PRIMARY KEY,
+                            migration VARCHAR(255) NOT NULL,
+                            batch     INTEGER NOT NULL,
+                            ran_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                         )",
+            default  => "CREATE TABLE IF NOT EXISTS libxa_migrations (
+                            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                            migration VARCHAR(255) NOT NULL,
+                            batch     INTEGER NOT NULL,
+                            ran_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+                         )",
+        };
+
+        $this->pdo->exec($sql);
     }
 
     public function getRanMigrations(): array
     {
-        return $this->pdo->query("SELECT migration FROM Libxa_migrations")
+        return $this->pdo->query("SELECT migration FROM libxa_migrations")
             ?->fetchAll(\PDO::FETCH_COLUMN) ?? [];
     }
 
@@ -193,7 +247,7 @@ class Migrator
     {
         $batch = $this->getCurrentBatchNumber();
         return $this->pdo->query(
-            "SELECT migration FROM Libxa_migrations WHERE batch = $batch ORDER BY id DESC"
+            "SELECT migration FROM libxa_migrations WHERE batch = $batch ORDER BY id DESC"
         )?->fetchAll(\PDO::FETCH_ASSOC) ?? [];
     }
 
@@ -204,22 +258,21 @@ class Migrator
 
     protected function getCurrentBatchNumber(): int
     {
-        $result = $this->pdo->query("SELECT MAX(batch) FROM Libxa_migrations")?->fetchColumn();
+        $result = $this->pdo->query("SELECT MAX(batch) FROM libxa_migrations")?->fetchColumn();
         return (int) $result;
     }
 
     protected function recordMigration(string $migration, int $batch): void
     {
         $stmt = $this->pdo->prepare(
-            "INSERT INTO Libxa_migrations (migration, batch) VALUES (?, ?)"
+            "INSERT INTO libxa_migrations (migration, batch) VALUES (?, ?)"
         );
         $stmt->execute([$migration, $batch]);
     }
 
     protected function deleteMigration(string $migration): void
     {
-        $stmt = $this->pdo->prepare("DELETE FROM Libxa_migrations WHERE migration = ?");
+        $stmt = $this->pdo->prepare("DELETE FROM libxa_migrations WHERE migration = ?");
         $stmt->execute([$migration]);
     }
 }
-

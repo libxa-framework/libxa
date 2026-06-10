@@ -14,12 +14,18 @@ use Libxa\Atlas\DB;
 class DBUserProvider implements UserProvider
 {
     public function __construct(
-        protected string $table  = 'users',
-        protected string $model  = \stdClass::class
+        protected string $table = 'users',
+        protected string $model = \stdClass::class
     ) {}
 
     public function retrieveById(mixed $identifier): ?Authenticatable
     {
+        // If a proper model class is configured, use it
+        if ($this->model !== \stdClass::class && class_exists($this->model)) {
+            $result = $this->model::find($identifier);
+            return ($result instanceof Authenticatable) ? $result : null;
+        }
+
         $user = DB::table($this->table)->where('id', $identifier)->first();
         return $this->mapToUser($user);
     }
@@ -45,6 +51,17 @@ class DBUserProvider implements UserProvider
     {
         if (empty($credentials)) {
             return null;
+        }
+
+        // Try model-based lookup first
+        if ($this->model !== \stdClass::class && class_exists($this->model)) {
+            $query = $this->model::query();
+            foreach ($credentials as $key => $value) {
+                if (str_contains($key, 'password')) continue;
+                $query->where($key, $value);
+            }
+            $result = $query->first();
+            return ($result instanceof Authenticatable) ? $result : null;
         }
 
         $query = DB::table($this->table);
@@ -76,15 +93,20 @@ class DBUserProvider implements UserProvider
             return null;
         }
 
-        // Return a proxy or the data cast to an anonymous class that implements Authenticatable
+        // If it's already an Authenticatable, return as-is
+        if ($data instanceof Authenticatable) {
+            return $data;
+        }
+
+        // Wrap stdClass / plain object in an anonymous Authenticatable proxy
         return new class($data) implements Authenticatable {
             public function __construct(protected object $data) {}
-            public function getAuthIdentifier(): mixed { return $this->data->id; }
-            public function getAuthPassword(): string { return $this->data->password; }
+            public function getAuthIdentifier(): mixed  { return $this->data->id ?? null; }
+            public function getAuthPassword(): string   { return $this->data->password ?? ''; }
             public function getRememberTokenName(): string { return 'remember_token'; }
             public function getRememberToken(): ?string { return $this->data->remember_token ?? null; }
             public function setRememberToken(string $token): void { $this->data->remember_token = $token; }
-            public function __get(string $name) { return $this->data->$name ?? null; }
+            public function __get(string $name): mixed  { return $this->data->$name ?? null; }
         };
     }
 }

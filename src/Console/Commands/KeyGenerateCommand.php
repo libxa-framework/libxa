@@ -20,7 +20,7 @@ class KeyGenerateCommand extends Command
 {
     protected static $defaultName = 'key:generate';
 
-    public function __construct(protected Application $Libxa)
+    public function __construct(protected Application $app)
     {
         parent::__construct();
     }
@@ -66,7 +66,7 @@ class KeyGenerateCommand extends Command
      */
     protected function setKeyInEnvironmentFile(string $key): bool
     {
-        $path = $this->Libxa->basePath('.env');
+        $path = $this->app->basePath('.env');
 
         if (! file_exists($path)) {
             return false;

@@ -252,7 +252,71 @@ PHP;
 
     protected function compileMisc(string $source): string
     {
-        $source = str_replace('@csrf', '<input type="hidden" name="_token" value="' . "<?= csrf_token() ?>" . '">', $source);
+        // @csrf
+        $source = str_replace('@csrf', '<input type="hidden" name="_token" value="<?= csrf_token() ?>">', $source);
+
+        // @method('PUT') → method spoofing hidden field
+        $source = preg_replace(
+            "/\@method\(['\"]([A-Z]+)['\"]\)/i",
+            '<input type="hidden" name="_method" value="$1">',
+            $source
+        );
+
+        // @session('key') ... @endsession
+        $source = preg_replace_callback(
+            "/\@session\(['\"]([^'\"]*)['\"]\\)\s*(.*?)\@endsession/s",
+            function (array $m): string {
+                $key     = addslashes($m[1]);
+                $content = $m[2];
+                return "<?php if (session('{$key}')): ?>{$content}<?php endif; ?>";
+            },
+            $source
+        );
+
+        // @old('key', 'default') → old input value
+        $source = preg_replace_callback(
+            "/\@old\(['\"]([^'\"]*)['\"](?:\s*,\s*['\"]([^'\"]*)['\"])?\)/",
+            function (array $m): string {
+                $key     = addslashes($m[1]);
+                $default = addslashes($m[2] ?? '');
+                return "<?= htmlspecialchars((string) old('{$key}', '{$default}'), ENT_QUOTES, 'UTF-8') ?>";
+            },
+            $source
+        );
+
+        // @json($variable) → JSON encoded
+        $source = preg_replace_callback(
+            '/\@json\((.+?)\)/',
+            fn($m) => "<?= json_encode({$m[1]}, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>",
+            $source
+        );
+
+        // @stack('name') → push stacks placeholder
+        $source = preg_replace(
+            "/\@stack\(['\"]([^'\"]*)['\"]\\)/",
+            "<?php echo \\Libxa\\Blade\\BladeStack::get('$1') ?? '' ?>",
+            $source
+        );
+
+        // @checked($condition)
+        $source = preg_replace_callback(
+            '/\@checked\((.+?)\)/',
+            fn($m) => "<?= ({$m[1]}) ? 'checked' : '' ?>",
+            $source
+        );
+        // @selected($condition)
+        $source = preg_replace_callback(
+            '/\@selected\((.+?)\)/',
+            fn($m) => "<?= ({$m[1]}) ? 'selected' : '' ?>",
+            $source
+        );
+        // @disabled($condition)
+        $source = preg_replace_callback(
+            '/\@disabled\((.+?)\)/',
+            fn($m) => "<?= ({$m[1]}) ? 'disabled' : '' ?>",
+            $source
+        );
+
         return $source;
     }
 

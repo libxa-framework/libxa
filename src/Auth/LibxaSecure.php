@@ -55,9 +55,11 @@ class LibxaSecure
     {
         $hashed = self::hash($plainToken);
 
-        return (object) DB::table('personal_access_tokens')
+        $record = DB::table('personal_access_tokens')
             ->where('token', $hashed)
             ->first();
+
+        return $record ?? null;
     }
 
     /**

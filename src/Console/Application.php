@@ -26,7 +26,7 @@ class Application extends SymfonyApplication
     private const C_PURPLE = "\033[38;2;192;132;252m";
     private const C_MUTED  = "\033[38;2;148;163;184m";
 
-    public function __construct(protected LibxaApplication $Libxa)
+    public function __construct(protected LibxaApplication $app)
     {
         parent::__construct('LibxaFrame', LibxaApplication::VERSION);
     }
@@ -82,7 +82,7 @@ class Application extends SymfonyApplication
         $R = self::C_RESET;
 
         $version = LibxaApplication::VERSION;
-        $env     = $this->Libxa->env('APP_ENV', 'local');
+        $env     = $this->app->env('APP_ENV', 'local');
 
         return implode(PHP_EOL, [
             '',
@@ -109,39 +109,39 @@ class Application extends SymfonyApplication
     public function discoverCommands(): void
     {
         $this->addCommands([
-            new Commands\ApiInstallCommand($this->Libxa),
-            new Commands\MakeControllerCommand($this->Libxa),
-            new Commands\MakeAdminWidgetCommand($this->Libxa),
-            new Commands\MakeAdminPageCommand($this->Libxa),
-            new Commands\MakeModuleCommand($this->Libxa),
-            new Commands\MigrateCommand($this->Libxa),
-            new Commands\MigrateStatusCommand($this->Libxa),
-            new Commands\ServeCommand($this->Libxa),
-            new Commands\WsServeCommand($this->Libxa),
-            new Commands\StorageLinkCommand($this->Libxa),
-            new Commands\QueueTableCommand($this->Libxa),
-            new Commands\QueueWorkCommand($this->Libxa),
-            new Commands\WsInstallCommand($this->Libxa),
-            new Commands\MakeRequestCommand($this->Libxa),
-            new Commands\Package\DiscoverCommand($this->Libxa),
-            new Commands\Package\AddCommand($this->Libxa),
-            new Commands\Vendor\PublishCommand($this->Libxa),
-            new Commands\Module\ExtractCommand($this->Libxa),
-            new Commands\Frontend\AddCommand($this->Libxa),
-            new Commands\Npm\AddCommand($this->Libxa),
-            new Commands\Npm\RemoveCommand($this->Libxa),
-            new Commands\Ui\TailwindCommand($this->Libxa),
-            new Commands\KeyGenerateCommand($this->Libxa),
+            new Commands\ApiInstallCommand($this->app),
+            new Commands\MakeControllerCommand($this->app),
+            new Commands\MakeAdminWidgetCommand($this->app),
+            new Commands\MakeAdminPageCommand($this->app),
+            new Commands\MakeModuleCommand($this->app),
+            new Commands\MigrateCommand($this->app),
+            new Commands\MigrateStatusCommand($this->app),
+            new Commands\ServeCommand($this->app),
+            new Commands\WsServeCommand($this->app),
+            new Commands\StorageLinkCommand($this->app),
+            new Commands\QueueTableCommand($this->app),
+            new Commands\QueueWorkCommand($this->app),
+            new Commands\WsInstallCommand($this->app),
+            new Commands\MakeRequestCommand($this->app),
+            new Commands\Package\DiscoverCommand($this->app),
+            new Commands\Package\AddCommand($this->app),
+            new Commands\Vendor\PublishCommand($this->app),
+            new Commands\Module\ExtractCommand($this->app),
+            new Commands\Frontend\AddCommand($this->app),
+            new Commands\Npm\AddCommand($this->app),
+            new Commands\Npm\RemoveCommand($this->app),
+            new Commands\Ui\TailwindCommand($this->app),
+            new Commands\KeyGenerateCommand($this->app),
         ]);
 
         // Auto-scan app/Console/Commands
-        $appCommandsDir = $this->Libxa->appPath('Console/Commands');
+        $appCommandsDir = $this->app->appPath('Console/Commands');
         if (is_dir($appCommandsDir)) {
             $this->addFromDirectory($appCommandsDir);
         }
         
         // Load package commands from manifest (packages/ directory)
-        $packages = (new \Libxa\Module\ModuleManifestManager($this->Libxa, 'packages'))->load();
+        $packages = (new \Libxa\Module\ModuleManifestManager($this->app, 'packages'))->load();
         foreach ($packages as $package) {
             $path = $package['path'] ?? null;
             if ($path && is_dir($path . '/src/Console/Commands')) {
@@ -150,7 +150,7 @@ class Application extends SymfonyApplication
         }
 
         // Load commands from Composer-installed packages (vendor/ directory)
-        $vendorDir = $this->Libxa->basePath() . '/vendor';
+        $vendorDir = $this->app->basePath() . '/vendor';
         if (is_dir($vendorDir)) {
             // Scan libxa and libxaframe packages directly
             $vendorPackages = ['libxa', 'libxaframe'];
@@ -182,7 +182,7 @@ class Application extends SymfonyApplication
         foreach ($files as $file) {
             $className = $this->getClassNameFromFile($file);
             if ($className && class_exists($className)) {
-                $command = new $className($this->Libxa);
+                $command = new $className($this->app);
                 $this->add($command);
             }
         }

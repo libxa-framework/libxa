@@ -27,7 +27,7 @@ class TenantManager
         // Default logic: Detect from domain or header
         if ($this->app->isHttp()) {
             $request = $this->app->make('request');
-            $this->tenantId = $request->header('X-Tenant-Id') ?: $request->host();
+            $this->tenantId = $request->header('X-Tenant-Id') ?: $request->server['HTTP_HOST'] ?? null;
         }
     }
 

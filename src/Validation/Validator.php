@@ -384,7 +384,7 @@ class Validator
 
     public function fails(): bool   { return ! empty($this->errors); }
     public function passes(): bool  { return empty($this->errors); }
-    public function errors(): array { return $this->errors; }
+    public function errors(): MessageBag { return new MessageBag($this->errors); }
 
     public function firstError(?string $field = null): ?string
     {

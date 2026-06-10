@@ -30,6 +30,9 @@ class MigrateCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        // Boot the application so database service providers are registered
+        $this->app->boot();
+
         $migrator = new Migrator();
         
         // Add default migration path

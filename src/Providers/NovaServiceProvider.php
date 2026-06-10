@@ -23,7 +23,10 @@ class NovaServiceProvider extends ServiceProvider
         });
 
         $this->app->alias('nova', ResourceManager::class);
+    }
 
+    public function boot(): void
+    {
         $this->registerRoutes();
     }
 

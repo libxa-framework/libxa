@@ -187,13 +187,26 @@ if (! function_exists('errors')) {
 }
 
 if (! function_exists('session')) {
+    /**
+     * Get a session value, checking flash data first then regular session.
+     * This matches the expected Blade @if(session('key')) pattern.
+     */
     function session(?string $key = null, mixed $default = null): mixed
     {
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
 
-        if ($key === null) return $_SESSION;
+        if ($key === null) {
+            return app()->has('session') ? app('session') : $_SESSION;
+        }
+
+        // Check flash 'old' bucket first (from ->with('key', value))
+        if (isset($_SESSION['_flash']['old'][$key])) {
+            return $_SESSION['_flash']['old'][$key];
+        }
+
+        // Fall back to regular session
         return $_SESSION[$key] ?? $default;
     }
 }

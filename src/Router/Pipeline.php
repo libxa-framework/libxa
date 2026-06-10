@@ -19,6 +19,14 @@ class Pipeline
     protected Request $passable;
     protected array   $pipes = [];
 
+    /** Fallback alias map used when HttpKernel is not available */
+    protected static array $aliases = [
+        'auth'     => \Libxa\Http\Middleware\AuthMiddleware::class,
+        'guest'    => \Libxa\Http\Middleware\GuestMiddleware::class,
+        'throttle' => \Libxa\Http\Middleware\ThrottleMiddleware::class,
+        'verified' => \Libxa\Http\Middleware\EmailVerifiedMiddleware::class,
+    ];
+
     public function __construct(protected Application $app) {}
 
     public function send(Request $request): static
@@ -67,16 +75,32 @@ class Pipeline
             $args = explode(',', $argStr);
         }
 
-        // Resolve middleware alias mapping statically defined in HttpKernel
-        if (class_exists(\Libxa\Foundation\HttpKernel::class)) {
-            $kernel  = $this->app->make(\Libxa\Foundation\HttpKernel::class);
-            $aliases = $kernel->getMiddlewareAliases();
+        // Resolve from static alias map first (avoids circular resolution)
+        if (isset(static::$aliases[$class])) {
+            return [static::$aliases[$class], $args];
+        }
 
-            if (isset($aliases[$class])) {
-                $class = $aliases[$class];
+        // Try kernel aliases (without causing circular dependency)
+        try {
+            if ($this->app->has(\Libxa\Foundation\HttpKernel::class)) {
+                $kernel  = $this->app->make(\Libxa\Foundation\HttpKernel::class);
+                $aliases = $kernel->getMiddlewareAliases();
+                if (isset($aliases[$class])) {
+                    return [$aliases[$class], $args];
+                }
             }
+        } catch (\Throwable) {
+            // Ignore — fall through to the raw class name
         }
 
         return [$class, $args];
+    }
+
+    /**
+     * Register additional middleware aliases at runtime.
+     */
+    public static function addAlias(string $alias, string $class): void
+    {
+        static::$aliases[$alias] = $class;
     }
 }

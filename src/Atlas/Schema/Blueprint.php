@@ -27,6 +27,7 @@ class Blueprint
     public function __construct(
         protected string $table,
         protected \PDO   $pdo,
+        protected bool   $alter = false,
     ) {}
 
     // ─────────────────────────────────────────────────────────────────
@@ -219,11 +220,27 @@ class Blueprint
 
     public function build(): void
     {
-        $sql = $this->toSql();
-        $this->pdo->exec($sql);
+        if ($this->alter) {
+            // ALTER TABLE: add each column individually
+            foreach ($this->columns as $col) {
+                $colSql = $col instanceof ColumnDefinition ? $col->toSql() : $col;
+                try {
+                    $this->pdo->exec("ALTER TABLE `{$this->table}` ADD COLUMN $colSql");
+                } catch (\Throwable $e) {
+                    // Column may already exist — silently skip
+                }
+            }
+        } else {
+            $sql = $this->toSql();
+            $this->pdo->exec($sql);
+        }
 
         foreach ($this->indexes as $indexSql) {
-            $this->pdo->exec($indexSql);
+            try {
+                $this->pdo->exec($indexSql);
+            } catch (\Throwable $e) {
+                // Index may already exist — silently skip
+            }
         }
     }
 }

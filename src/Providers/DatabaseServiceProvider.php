@@ -13,14 +13,19 @@ class DatabaseServiceProvider extends ServiceProvider
     {
         $this->app->singleton(ConnectionPool::class, function ($app) {
             $pool = ConnectionPool::getInstance();
-            
-            // Register default connection from config
-            $config = $app->config('database.connections.' . $app->config('database.default', 'sqlite'), []);
-            
-            if ($config) {
-                // If it's the first time, ConnectionPool might need to be primed
+
+            // Build the full connections config map and configure the pool
+            $dbConfig     = $app->config('database', []);
+            $default      = $dbConfig['default'] ?? 'sqlite';
+            $connections  = $dbConfig['connections'] ?? [];
+
+            // Normalise: set the resolved default connection as 'default'
+            if (isset($connections[$default])) {
+                $connections['default'] = $connections[$default];
             }
-            
+
+            $pool->configure($connections);
+
             return $pool;
         });
 

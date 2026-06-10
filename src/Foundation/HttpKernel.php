@@ -20,25 +20,31 @@ use Libxa\Router\Router;
  */
 class HttpKernel
 {
-    /** Global middleware stack (applied to every request) */
+    /**
+     * Global middleware stack (applied to every request, before routing).
+     */
     protected array $middleware = [
         \Libxa\Multitenancy\Middleware\InitializeTenancy::class,
         \Libxa\Http\Middleware\TrimStringsMiddleware::class,
+        \Libxa\Http\Middleware\SessionMiddleware::class,
         \Libxa\Http\Middleware\CsrfMiddleware::class,
     ];
 
-    /** Middleware groups */
+    /**
+     * Middleware groups — applied when a route uses them.
+     */
     protected array $middlewareGroups = [
         'web' => [
             \Libxa\Http\Middleware\SessionMiddleware::class,
-            \Libxa\Http\Middleware\ShareErrorsMiddleware::class,
         ],
         'api' => [
             \Libxa\Http\Middleware\ThrottleMiddleware::class . ':60',
         ],
     ];
 
-    /** Named middleware aliases */
+    /**
+     * Named middleware aliases.
+     */
     protected array $middlewareAliases = [
         'auth'     => \Libxa\Http\Middleware\AuthMiddleware::class,
         'guest'    => \Libxa\Http\Middleware\GuestMiddleware::class,
@@ -86,7 +92,12 @@ class HttpKernel
         /** @var Router $router */
         $router = $this->app->make(Router::class);
 
-        return $router->dispatch($request);
+        // Run global middleware then dispatch
+        $pipeline = new \Libxa\Router\Pipeline($this->app);
+        return $pipeline
+            ->send($request)
+            ->through($this->middleware)
+            ->then(fn(Request $req) => $router->dispatch($req));
     }
 
     protected function handleException(\Throwable $e, Request $request): Response

@@ -91,6 +91,15 @@ class Request
         return $this->method() === strtoupper($method);
     }
 
+    /**
+     * Determine whether the request uses a "safe" HTTP verb
+     * (one that should not mutate state — GET, HEAD, OPTIONS).
+     */
+    public function isMethodSafe(): bool
+    {
+        return in_array($this->method(), ['GET', 'HEAD', 'OPTIONS']);
+    }
+
     public function uri(): string { return $this->uri; }
 
     public function path(): string
@@ -98,8 +107,7 @@ class Request
         $path = parse_url($this->uri, PHP_URL_PATH) ?? '/';
         $path = '/' . ltrim($path, '/');
 
-        // If the path starts with /index.php, we remove it to get the logical route path.
-        // This allows routes to work both with and without index.php in the URL.
+        // Strip /index.php prefix so routes work both with and without it
         if (str_starts_with($path, '/index.php/')) {
             $path = substr($path, 10);
         } elseif ($path === '/index.php') {
@@ -288,6 +296,18 @@ class Request
     }
 
     // ─────────────────────────────────────────────────────────────────
+    //  Session helpers (delegates to the session service)
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Get the session instance.
+     */
+    public function session(): \Libxa\Session\Session
+    {
+        return app('session');
+    }
+
+    // ─────────────────────────────────────────────────────────────────
     //  Validation shortcut
     // ─────────────────────────────────────────────────────────────────
 
@@ -300,13 +320,5 @@ class Request
         }
 
         return $validator->validated();
-    }
-
-    /**
-     * Get the session instance.
-     */
-    public function session(): \Libxa\Session\Session
-    {
-        return app('session');
     }
 }
