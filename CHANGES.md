@@ -88,7 +88,48 @@
 
 ## Summary
 
-**Total issues fixed: 40+**  
-**Files modified: 28**  
-**New files created: 6**  
-**PHP syntax errors after fixes: 0 / 0**
+---
+
+## View Layer Stability Pass — Blade-X Engine (July 2026)
+
+Scope: `src/Blade/Compiler.php`, `src/Blade/BladeEngine.php`, `src/Blade/BladeStack.php`,
+new tests in `tests/Feature/BladeCompilerTest.php`. This was a from-scratch audit of the
+template engine specifically, since it's the piece every request touches.
+
+### 🔴 Confirmed pre-existing crash (not introduced by this pass)
+
+| Issue | Impact | Fix |
+|---|---|---|
+| `LibxaStack-main/src/resources/views/layouts/app.blade.php` uses `@hasSection('no-footer')`, but the compiler never implemented that directive | The starter kit's **own default layout** — the one every page extends — produced a fatal PHP parse error in its compiled cache file. Verified against the original, unmodified compiler. | Implemented `@hasSection` / `@endHasSection` and `@sectionMissing` / `@endSectionMissing` |
+
+### 🔴 Stability bugs found and fixed in the engine itself
+
+| Issue | Impact | Fix |
+|---|---|---|
+| `evaluateView()` only called `ob_end_clean()` once on exception | A section/component that throws mid-buffer leaks an output-buffer level. Harmless per-request under php-fpm, but **corrupts every subsequent request** on the framework's persistent Workerman/reactive server (`src/Reactive/WsServer.php`), since PHP's ob stack is process-global. Reproduced and verified with a standalone test that measures `ob_get_level()` before/after. | Track the ob baseline and unwind every level opened during the render, in a `finally`-guarded loop |
+| Cache file written via a single `file_put_contents()` | Concurrent first-requests for the same cold view can interleave writes → a half-written PHP file gets `include()`'d → sporadic fatal parse errors in production | Write to a unique temp file, then `rename()` (atomic on POSIX) |
+| `@if`/`@foreach`/`@while`/etc. used a fixed-one-level-deep regex for balanced parens | Two or more levels of nested parens (e.g. `@if(in_array($x, [f(1,2)]))`) truncated the condition and produced broken/incorrect PHP. Reproduced: original compiler threw a parse error on this exact input. | Replaced with a string-aware, arbitrary-depth paren scanner (`compileDirective()` / `findMatchingParen()`) that also correctly ignores parens inside quoted strings |
+| View/component names were interpolated raw into generated PHP string literals | A quote character in a view name (or in the raw text near `@include(...)`) could produce a fatal parse error in the compiled cache file | All literal names now go through `addslashes()` before being embedded |
+| `$__sections` was only initialized inside the `@extends` branch | A view using `@section(...)/@endsection` without `@extends` (a normal reusable-partial pattern) hit an undefined-variable warning | Every compiled template now starts with `$__sections = $__sections ?? []` |
+| No recursion guard on `@include`/`@extends` chains | A circular include (`a` includes `b` includes `a`) crashed the whole PHP worker with a stack overflow instead of a catchable error | Added a depth counter (default max 64) that throws a clear `RuntimeException` |
+| `@push`/`@endpush`/`@prepend` were documented (`BladeStack` class, doc comments) but never wired into the compiler | Using `@push` in a view silently printed the literal text `@push('name')` instead of doing anything | Implemented `@push`, `@endpush`, `@prepend`, `@endprepend` |
+| `BladeStack`'s static stacks were never flushed | On the persistent reactive server, content pushed by one request could leak into another unrelated request's `@stack()` output forever | `BladeEngine` now calls `BladeStack::flush()` once at the start of every fresh (non-nested) render |
+| No `@verbatim`/`@endverbatim` | The framework ships React/Vue/Svelte frontend adapters, both of which use `{{ }}` in their own templates — with no way to protect that syntax from Blade's compiler, it always got mangled | Added `@verbatim`/`@endverbatim` |
+| Namespaced view resolution (`admin::users.index`) silently fell through to a broken generic path when the namespace was unregistered, producing a confusing error | Debuggability under `admin::` module views | Explicit "namespace not registered" exception; namespaces can now also register multiple fallback paths (`addNamespace()` accepts an array, matching Laravel's package/module view-overriding behavior) |
+| Cache invalidation used `filemtime() >` only | A source edit in the same second as the previous compile could be served stale | Changed to `>=` and cache write is now all-or-nothing (see atomic write fix above), so a stale *and* corrupt cache can no longer coexist |
+| Missing `@unless`, `@isset`/`@endisset`, `@includeIf`, `@includeWhen`, `@each`, `@slot`/`@endslot`, `@show`, `@readonly`, `@required` | Common Blade directives Laravel ships that this engine was missing | Implemented all of the above |
+
+### Verification
+
+All changes were verified by actually compiling and *executing* templates (not just
+reading the code):
+- Every `.blade.php` file shipped in both `libxa-main` and `LibxaStack-main` now compiles
+  to lint-clean PHP (previously `layouts/app.blade.php` did not).
+- A standalone reproduction proved the output-buffer leak on the original code and its
+  absence on the new code (`ob_get_level()` before/after a mid-section exception).
+- Adversarial inputs (nested parens 2–4 levels deep, quotes in view/include names,
+  `@section` without `@extends`, circular `@include`, unregistered namespaces,
+  `@push`/`@stack` across multiple pushes, `@verbatim` blocks) were compiled, linted,
+  and executed end-to-end against the real `Compiler`/`BladeEngine` classes.
+- New regression tests added at `tests/Feature/BladeCompilerTest.php` so these stay fixed.
+
