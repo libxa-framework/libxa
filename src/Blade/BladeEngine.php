@@ -217,6 +217,24 @@ class BladeEngine
             );
         }
 
+        // Merge globally shared data (BladeEngine::share() / SharedData) in
+        // underneath the per-render $__data, so explicit render() data always
+        // wins over a shared default. This is what makes View::share()-style
+        // globals actually reach the template — previously SharedData was
+        // written to but never read back here, so anything relying on a
+        // shared value (including the $errors bag below) was always null.
+        $__data = array_replace(SharedData::all(), $__data);
+
+        // The validation error bag ($errors) is expected to be available in
+        // *every* view, even when nothing failed validation and no
+        // controller explicitly passed it in (mirrors Laravel's behavior).
+        // Without this, `@if($errors->any())` in a view fatals with
+        // "Call to a member function any() on null" the first time it's
+        // rendered without an explicit $errors variable.
+        if (! array_key_exists('errors', $__data)) {
+            $__data['errors'] = function_exists('errors') ? errors() : new \Libxa\Validation\MessageBag();
+        }
+
         // extract() populates $__sections directly when renderWithSections()
         // passed one along in $__data; otherwise the compiled template's own
         // "$__sections = $__sections ?? []" header initializes it safely.

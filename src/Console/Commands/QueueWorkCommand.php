@@ -18,9 +18,21 @@ class QueueWorkCommand extends Command
      */
     protected bool $shouldQuit = false;
 
+    /** Timestamp of the restart signal seen when this worker booted. */
+    protected ?string $startedAt = null;
+
     public function __construct(protected Application $app)
     {
         parent::__construct();
+    }
+
+    /**
+     * Path to the file used to broadcast a "restart" signal from
+     * `queue:restart` to any running `queue:work` processes.
+     */
+    public static function restartSignalPath(Application $app): string
+    {
+        return $app->storagePath('framework/cache/queue-restart');
     }
 
     protected function configure(): void
@@ -42,11 +54,17 @@ class QueueWorkCommand extends Command
         $output->writeln("<info>Worker started. Listening for jobs on [{$queue}] queue...</info>");
 
         $this->listenForSignals();
+        $this->startedAt = $this->currentRestartSignal();
 
         /** @var QueueManager $queueManager */
         $queueManager = $this->app->make('queue');
 
         while (! $this->shouldQuit) {
+            if ($this->restartSignalChanged()) {
+                $output->writeln("<comment>Restart signal received, stopping worker...</comment>");
+                break;
+            }
+
             $connection = $queueManager->connection();
             $job = $connection->pop($queue);
 
@@ -94,5 +112,16 @@ class QueueWorkCommand extends Command
             pcntl_signal(SIGTERM, function () { $this->shouldQuit = true; });
             pcntl_signal(SIGINT,  function () { $this->shouldQuit = true; });
         }
+    }
+
+    protected function currentRestartSignal(): ?string
+    {
+        $path = static::restartSignalPath($this->app);
+        return is_file($path) ? @file_get_contents($path) ?: null : null;
+    }
+
+    protected function restartSignalChanged(): bool
+    {
+        return $this->currentRestartSignal() !== $this->startedAt;
     }
 }

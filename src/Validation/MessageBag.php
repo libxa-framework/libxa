@@ -44,9 +44,25 @@ class MessageBag
     }
 
     /**
-     * Get all messages in the bag.
+     * Get all messages in the bag, flattened into a single flat list of
+     * message strings (matches Laravel's $errors->all() behavior, which is
+     * what views loop over with `@foreach ($errors->all() as $error)`).
      */
     public function all(): array
+    {
+        $flat = [];
+        foreach ($this->messages as $messages) {
+            foreach ((array) $messages as $message) {
+                $flat[] = $message;
+            }
+        }
+        return $flat;
+    }
+
+    /**
+     * Get all messages keyed by field name (the "raw" internal shape).
+     */
+    public function getMessages(): array
     {
         return $this->messages;
     }
@@ -68,7 +84,8 @@ class MessageBag
     }
 
     /**
-     * Get the messages as an array (alias for all()).
+     * Get the messages as a keyed array (field => messages[]). Used e.g. for
+     * JSON API error payloads, where the field association matters.
      */
     public function toArray(): array
     {
@@ -80,7 +97,7 @@ class MessageBag
      */
     public function merge(array|MessageBag $messages): static
     {
-        $data = $messages instanceof MessageBag ? $messages->all() : $messages;
+        $data = $messages instanceof MessageBag ? $messages->getMessages() : $messages;
         foreach ($data as $key => $value) {
             $this->messages[$key] = array_merge(
                 $this->messages[$key] ?? [],

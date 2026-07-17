@@ -40,6 +40,17 @@ class ApiInstallCommand extends Command
 
     protected function createMigration(OutputInterface $output): void
     {
+        // Guard against duplicate migrations: if api:install has already
+        // been run (or was run more than once), a file declaring
+        // `class CreatePersonalAccessTokensTable` already exists. Creating
+        // another one is a fatal "Cannot redeclare class" error at migrate
+        // time, so skip instead of writing a second copy.
+        $existing = glob($this->app->basePath('src/database/migrations/*_create_personal_access_tokens_table.php'));
+        if (! empty($existing)) {
+            $output->writeln("<comment>Skipped</comment> personal_access_tokens migration already exists (" . basename($existing[0]) . ").");
+            return;
+        }
+
         $migrationFile = $this->app->basePath('src/database/migrations/' . date('Y_m_d_His') . '_create_personal_access_tokens_table.php');
         $content = <<<'PHP'
 <?php

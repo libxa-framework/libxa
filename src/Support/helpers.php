@@ -182,6 +182,16 @@ if (! function_exists('errors')) {
         }
 
         $errors = $_SESSION['_flash']['old']['errors'] ?? [];
+
+        // The exception handler flashes the MessageBag instance itself
+        // (`->with('errors', $e->errors())`), not a plain array. Casting an
+        // object to array with (array) mangles it into a single entry keyed
+        // by the mangled protected-property name, which silently corrupts
+        // every error message. Unwrap it properly instead.
+        if ($errors instanceof \Libxa\Validation\MessageBag) {
+            return $errors;
+        }
+
         return new \Libxa\Validation\MessageBag((array) $errors);
     }
 }
