@@ -19,7 +19,7 @@ class WsMessage
         return $this->event;
     }
 
-    public function data(string $key = null, mixed $default = null): mixed
+    public function data(?string $key = null, mixed $default = null): mixed
     {
         if ($key === null) return $this->data;
         return $this->data[$key] ?? $default;

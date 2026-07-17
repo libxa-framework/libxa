@@ -19,7 +19,7 @@ class DatabaseQueue implements Queue
     /**
      * Push a new job onto the queue.
      */
-    public function push(string|object $job, mixed $data = '', string $queue = null): mixed
+    public function push(string|object $job, mixed $data = '', ?string $queue = null): mixed
     {
         return $this->pushToDatabase($queue ?: $this->default, $this->createPayload($job, $data));
     }
@@ -27,7 +27,7 @@ class DatabaseQueue implements Queue
     /**
      * Push a new job onto the queue after a delay.
      */
-    public function later(int $delay, string|object $job, mixed $data = '', string $queue = null): mixed
+    public function later(int $delay, string|object $job, mixed $data = '', ?string $queue = null): mixed
     {
         return $this->pushToDatabase($queue ?: $this->default, $this->createPayload($job, $data), $delay);
     }
@@ -35,7 +35,7 @@ class DatabaseQueue implements Queue
     /**
      * Pop the next job off of the queue.
      */
-    public function pop(string $queue = null): ?Job
+    public function pop(?string $queue = null): ?Job
     {
         $queue = $queue ?: $this->default;
 
@@ -54,7 +54,7 @@ class DatabaseQueue implements Queue
     /**
      * Get the size of the queue.
      */
-    public function size(string $queue = null): int
+    public function size(?string $queue = null): int
     {
         return DB::table($this->table)
             ->where('queue', $queue ?: $this->default)

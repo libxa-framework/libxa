@@ -26,15 +26,23 @@ class RouterServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Auto-load app routes
-        $webRoutes = $this->app->basePath('src/routes/web.php');
-        if (file_exists($webRoutes)) {
-            $this->loadRoutesFrom($webRoutes);
-        }
+        $cacheFile = $this->app->basePath('src/bootstrap/cache/routes.php');
 
-        $apiRoutes = $this->app->basePath('src/routes/api.php');
-        if (file_exists($apiRoutes)) {
-            $this->loadRoutesFrom($apiRoutes);
+        if (file_exists($cacheFile)) {
+            /** @var Router $router */
+            $router = $this->app->make(Router::class);
+            $router->loadCachedRoutes(require $cacheFile);
+        } else {
+            // Auto-load app routes
+            $webRoutes = $this->app->basePath('src/routes/web.php');
+            if (file_exists($webRoutes)) {
+                $this->loadRoutesFrom($webRoutes);
+            }
+
+            $apiRoutes = $this->app->basePath('src/routes/api.php');
+            if (file_exists($apiRoutes)) {
+                $this->loadRoutesFrom($apiRoutes);
+            }
         }
 
         // Auto-scan WebSocket channels

@@ -12,8 +12,15 @@ class ConfigServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton('config', function ($app) {
-            $config = new Config($app->configPath());
-            $config->load();
+            $config    = new Config($app->configPath());
+            $cacheFile = $app->basePath('src/bootstrap/cache/config.php');
+
+            if (is_file($cacheFile)) {
+                $config->loadFromArray(require $cacheFile);
+            } else {
+                $config->load();
+            }
+
             return $config;
         });
     }

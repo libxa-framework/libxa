@@ -29,6 +29,15 @@ class Config
         }
     }
 
+    /**
+     * Replace all config items with a pre-built array (used to hydrate from
+     * the file written by `config:cache`, skipping the directory scan).
+     */
+    public function loadFromArray(array $items): void
+    {
+        $this->items = $items;
+    }
+
     // ─────────────────────────────────────────────────────────────────
     //  Access
     // ─────────────────────────────────────────────────────────────────

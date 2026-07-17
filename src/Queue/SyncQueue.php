@@ -15,7 +15,7 @@ class SyncQueue implements Queue
     /**
      * Push a new job onto the queue.
      */
-    public function push(string|object $job, mixed $data = '', string $queue = null): mixed
+    public function push(string|object $job, mixed $data = '', ?string $queue = null): mixed
     {
         if (is_string($job)) {
             $job = new $job($data);
@@ -38,7 +38,7 @@ class SyncQueue implements Queue
      * Push a new job onto the queue after a delay.
      * In sync mode, delay is ignored and job is run immediately.
      */
-    public function later(int $delay, string|object $job, mixed $data = '', string $queue = null): mixed
+    public function later(int $delay, string|object $job, mixed $data = '', ?string $queue = null): mixed
     {
         return $this->push($job, $data, $queue);
     }
@@ -47,7 +47,7 @@ class SyncQueue implements Queue
      * Pop the next job off of the queue.
      * Sync mode doesn't store jobs.
      */
-    public function pop(string $queue = null): ?Job
+    public function pop(?string $queue = null): ?Job
     {
         return null;
     }
@@ -55,7 +55,7 @@ class SyncQueue implements Queue
     /**
      * Get the size of the queue.
      */
-    public function size(string $queue = null): int
+    public function size(?string $queue = null): int
     {
         return 0;
     }

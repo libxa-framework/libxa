@@ -54,7 +54,7 @@ class Field
         public bool $sortable = false,
     ) {}
 
-    public static function make(string $name, string $attribute = null): static
+    public static function make(string $name, ?string $attribute = null): static
     {
         return new static($name, $attribute ?? strtolower($name));
     }

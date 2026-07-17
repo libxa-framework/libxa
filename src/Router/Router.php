@@ -411,4 +411,29 @@ class Router
     {
         return $this->routes;
     }
+
+    /**
+     * Populate the route collection directly from a cached, pre-resolved
+     * route definition array (as produced by `route:cache`), bypassing the
+     * normal file-based registration (route files, group prefixes, etc. —
+     * all of that is already baked into the cached definitions).
+     *
+     * @param array<int, array{methods: array, uri: string, action: mixed, name?: string, middleware?: array}> $cached
+     */
+    public function loadCachedRoutes(array $cached): void
+    {
+        foreach ($cached as $definition) {
+            $route = new Route($definition['methods'], $definition['uri'], $definition['action']);
+
+            if (! empty($definition['name'])) {
+                $route->name($definition['name']);
+            }
+
+            if (! empty($definition['middleware'])) {
+                $route->middleware($definition['middleware']);
+            }
+
+            $this->routes->add($route);
+        }
+    }
 }
