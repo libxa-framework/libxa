@@ -522,7 +522,12 @@ if (! function_exists('broadcast')) {
 }
 
 if (! function_exists('ws')) {
-    function ws(): \Libxa\WebSockets\Broadcasting\WsBroadcast
+    /**
+     * Get the configured broadcast driver (LibxaBroadcaster, PusherBroadcaster,
+     * LogBroadcaster, or — if the optional libxa/socket package is
+     * installed and BROADCAST_DRIVER=ws — LibxaSocket\Broadcasting\WsBroadcast).
+     */
+    function ws(): \Libxa\Broadcasting\Broadcaster
     {
         return app('broadcast');
     }

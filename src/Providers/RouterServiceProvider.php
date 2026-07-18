@@ -17,11 +17,9 @@ class RouterServiceProvider extends ServiceProvider
 
         $this->app->alias(Router::class, 'router');
 
-        $this->app->singleton(\Libxa\WebSockets\WsRouter::class, function ($app) {
-            return new \Libxa\WebSockets\WsRouter($app);
-        });
-
-        $this->app->alias(\Libxa\WebSockets\WsRouter::class, 'ws.router');
+        // WebSocket routing (WsRouter, ws.router, app/WebSockets scanning)
+        // now lives in the optional libxa/socket package, not the core
+        // framework — see SocketServiceProvider in that package.
     }
 
     public function boot(): void
@@ -43,14 +41,6 @@ class RouterServiceProvider extends ServiceProvider
             if (file_exists($apiRoutes)) {
                 $this->loadRoutesFrom($apiRoutes);
             }
-        }
-
-        // Auto-scan WebSocket channels
-        $wsPath = $this->app->basePath('src/app/WebSockets');
-        if (is_dir($wsPath)) {
-            /** @var \Libxa\WebSockets\WsRouter $wsRouter */
-            $wsRouter = $this->app->make('ws.router');
-            $wsRouter->scanDirectory($wsPath, 'App\\WebSockets');
         }
     }
 }
