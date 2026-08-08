@@ -51,6 +51,21 @@ class ViteManifest
         $manifest = static::loadManifest();
         $tags     = '';
 
+        // A JS entry lists the CSS it imports, and that same file is usually
+        // *also* passed to @vite() explicitly — the conventional
+        // @vite(['app.js', 'app.css']) emitted the stylesheet link twice.
+        $emitted = [];
+
+        $link = static function (string $href) use (&$emitted): string {
+            if (isset($emitted[$href])) {
+                return '';
+            }
+
+            $emitted[$href] = true;
+
+            return "<link rel=\"stylesheet\" href=\"{$href}\">\n";
+        };
+
         foreach ($entries as $entry) {
             $asset = $manifest[$entry] ?? null;
 
@@ -59,14 +74,17 @@ class ViteManifest
             $file = '/build/' . $asset['file'];
 
             if (str_ends_with($file, '.css')) {
-                $tags .= "<link rel=\"stylesheet\" href=\"$file\">\n";
+                $tags .= $link($file);
             } else {
-                $tags .= "<script type=\"module\" src=\"$file\"></script>\n";
-            }
+                if (! isset($emitted[$file])) {
+                    $emitted[$file] = true;
+                    $tags .= "<script type=\"module\" src=\"{$file}\"></script>\n";
+                }
 
-            // Also load CSS for JS entry points
-            foreach ($asset['css'] ?? [] as $css) {
-                $tags .= "<link rel=\"stylesheet\" href=\"/build/$css\">\n";
+                // Stylesheets imported by this JS entry.
+                foreach ($asset['css'] ?? [] as $css) {
+                    $tags .= $link('/build/' . $css);
+                }
             }
         }
 

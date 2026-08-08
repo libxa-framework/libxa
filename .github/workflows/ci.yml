@@ -25,7 +25,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ["8.3", "8.4"]
+        # Every stable PHP the package claims to support. "php": "^8.3" means
+        # 8.3, 8.4 and 8.5 — so all three are proven here, not just the one
+        # the maintainer happens to run.
+        php: ["8.3", "8.4", "8.5"]
         dependencies: [highest]
         include:
           # Guards the *lower* bound of every constraint in composer.json.
