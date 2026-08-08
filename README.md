@@ -748,17 +748,19 @@ return [
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting pull requests.
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and
+see [How this project works](#how-this-project-works) below for the branch and
+release model. **Branch from `develop`, never from `main`.**
 
 ## License
 
-LibxaFrame is open-sourced software licensed under the MIT license.
+LibxaFrame is open-sourced software licensed under the [MIT license](LICENSE).
 
 ## Support
 
-- **Documentation**: [docs/](../docs)
-- **Issues**: [GitHub Issues](https://github.com/libxa/framework/issues)
-- **Discord**: [Join our Discord](https://discord.gg/libxa)
+- **Issues**: [GitHub Issues](https://github.com/libxa-framework/libxa/issues)
+- **Questions**: [GitHub Discussions](https://github.com/libxa-framework/libxa/discussions)
+- **Security**: [SECURITY.md](SECURITY.md) - never a public issue
 
 ## Acknowledgments
 
@@ -768,10 +770,7 @@ Built with ❤️ using PHP 8.3+
 
 **LibxaFrame - The Modern PHP Framework**
 
-## Project governance
-
-| Document | What it covers |
-|---|---|
+---|---|
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Local setup, branch rules, commit convention, test policy |
 | [docs/BRANCHING.md](docs/BRANCHING.md) | The branch model — `main` is what Packagist publishes |
 | [docs/RELEASING.md](docs/RELEASING.md) | Release and hotfix runbook |
@@ -781,3 +780,217 @@ Built with ❤️ using PHP 8.3+
 | [CHANGES.md](CHANGES.md) | Engineering write-up of the July and August 2026 stability audits |
 
 Contributions branch from `develop`, never from `main`.
+
+---
+
+# How this project works
+
+Everything below is the **operating model**: how the two repositories relate,
+how a change travels from a developer's machine to Packagist, and what is
+enforced automatically along the way. The reference documents
+([BRANCHING](docs/BRANCHING.md), [RELEASING](docs/RELEASING.md),
+[REPOSITORY_SETUP](docs/REPOSITORY_SETUP.md)) go deeper; this section is the
+complete picture in one place.
+
+## The two repositories
+
+| Repository | Packagist | Type | What it is |
+|---|---|---|---|
+| [libxa-framework/libxa](https://github.com/libxa-framework/libxa) | `libxa/framework` | library | **This repo.** The framework itself. Installed into `vendor/`. |
+| [libxa-framework/LibxaStack](https://github.com/libxa-framework/LibxaStack) | `libxa/libxa` | project | The starter kit. What `composer create-project` produces. |
+
+They version **independently**. A framework release does not require a starter
+kit release — but a framework *minor* release usually gets one, so new projects
+receive the new version.
+
+```
+        ┌──────────────────────────┐
+        │  libxa/framework         │   the library
+        │  (this repository)       │
+        └───────────┬──────────────┘
+                    │ composer require
+                    ▼
+        ┌──────────────────────────┐
+        │  libxa/libxa             │   the skeleton
+        │  (LibxaStack)            │
+        └───────────┬──────────────┘
+                    │ composer create-project
+                    ▼
+              a user's new app
+```
+
+## Branch model
+
+**`main` is what Packagist publishes. Nothing reaches `main` except through a
+reviewed `release/*` or `hotfix/*` pull request.**
+
+```
+  feature/auth-guards ─┐
+  fix/router-405 ──────┼──▶ develop ──▶ release/v0.9.0 ──▶ main ──(tag v0.9.0)──▶ Packagist
+  docs/contributing ───┘        ▲                            │
+                                │                            │
+                                └────── back-merge ──────────┤
+                                                             │
+                          hotfix/v0.8.1 ────────────────────▶─┘
+```
+
+| Branch | From | Into | Lifetime | Protected |
+|---|---|---|---|---|
+| `main` | — | — | permanent | ✅ |
+| `develop` | `main` | — | permanent | ✅ |
+| `feature/*` `fix/*` `docs/*` `test/*` `refactor/*` `chore/*` `perf/*` | `develop` | `develop` | hours–days | — |
+| `release/vX.Y.Z` | `develop` | `main` **and** `develop` | days | — |
+| `hotfix/vX.Y.Z` | `main` | `main` **and** `develop` | hours | — |
+
+`develop` is the default branch on GitHub, so new pull requests target it
+automatically.
+
+## Day-to-day development
+
+```bash
+# 1. Start from develop, always
+git checkout develop
+git pull origin develop
+git checkout -b fix/csrf-array-token
+
+# 2. Work. Every bug fix needs a test that fails without the fix.
+composer test -- --filter CsrfMiddlewareTest
+
+# 3. Everything CI will run, locally
+composer check          # lint + full suite + security audit
+
+# 4. Rebase and open a PR into develop
+git fetch origin
+git rebase origin/develop
+git push -u origin fix/csrf-array-token
+gh pr create --base develop
+```
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org):
+
+```
+fix(router): match optional parameters without a trailing slash
+feat(validation): add numeric-aware min/max sizing
+feat(request)!: normalise header keys      # ! marks a breaking change
+```
+
+## Working on the framework and an app together
+
+Most framework changes are best validated against a real application. Clone
+both repositories as **siblings**:
+
+```
+your-workspace/
+├── libxaframe/     # this repo:  git clone .../libxa.git libxaframe
+└── LibxaStack/     # git clone .../LibxaStack.git
+```
+
+`composer install` inside `LibxaStack` then **junctions**
+`vendor/libxa/framework` onto `../libxaframe`. The vendor directory *is* your
+framework working copy, so:
+
+- framework edits take effect on the next request — no `composer update`, no
+  `dump-autoload`, not even for brand-new classes (PSR-4 resolves them live);
+- the two can never drift apart. They previously did, in both directions, and
+  framework fixes silently had no effect on the app.
+
+```bash
+(cd libxaframe && composer check)
+(cd LibxaStack  && composer check)
+```
+
+When no sibling checkout exists — CI, a normal install — the path repository's
+glob matches nothing and `libxa/framework` resolves from Packagist instead.
+
+## What CI enforces
+
+Every pull request into `develop` or `main` must pass:
+
+| Job | Checks |
+|---|---|
+| `Tests · PHP 8.3` / `8.4` | Full suite on both supported versions |
+| `Tests` (`--prefer-lowest`) | The *lower* bound of every constraint actually works |
+| `PSR-4 contract` | One class per file, no duplicate declarations |
+| `Security audit` | No known vulnerabilities in dependencies |
+| `Distribution archive` | `src/` ships; `tests/`, `docs/`, `tools/`, `.github/` do not |
+
+The PSR-4 job is not style enforcement. A class the autoloader cannot find is a
+fatal `Class not found` at runtime, and a class declared in two files is a
+fatal `Cannot redeclare class` the moment both load. **Both shipped in this
+framework**, which is why it is a build gate.
+
+## Releasing
+
+Tags are created **by a human**; CI verifies rather than creates them. Full
+runbook: [docs/RELEASING.md](docs/RELEASING.md).
+
+```bash
+# 1. Cut the release branch — develop is now open for the version after next
+git checkout develop && git pull
+git checkout -b release/v0.9.0
+
+# 2. Move [Unreleased] in CHANGELOG.md into a dated ## [0.9.0] section
+
+# 3. Verify
+composer check
+
+# 4. PR into main, get it reviewed, merge
+
+# 5. Tag on main — annotated, never lightweight
+git checkout main && git pull
+git tag -a v0.9.0 -m "Release v0.9.0"
+git push origin v0.9.0
+
+# 6. Back-merge, or the next release silently reverts this one
+git checkout develop
+git merge --no-ff origin/main
+git push origin develop
+```
+
+`release.yml` refuses to publish a tag that is not annotated, not SemVer, not
+an ancestor of `main`, or not documented in `CHANGELOG.md` — and re-runs the
+full suite at the tagged commit before creating the GitHub Release. Packagist
+publishes independently via its push webhook.
+
+### Version numbers
+
+[SemVer](https://semver.org), prefixed `v`. **Below 1.0, Composer treats the
+minor number as the compatibility boundary** — `^0.8.0` allows `0.8.9` but not
+`0.9.0`:
+
+| Change | Pre-1.0 | Post-1.0 |
+|---|---|---|
+| Breaking API change | `0.8.3` → `0.9.0` | `1.4.2` → `2.0.0` |
+| New backward-compatible feature | `0.8.3` → `0.8.4` | `1.4.2` → `1.5.0` |
+| Bug fix | `0.8.3` → `0.8.4` | `1.4.2` → `1.4.3` |
+
+Because a pre-1.0 feature and a pre-1.0 fix share the same slot, anything that
+breaks a documented API needs a **minor** bump even when the diff looks small.
+
+## Hotfixes
+
+The only branch that starts from `main`:
+
+```bash
+git checkout main && git pull
+git checkout -b hotfix/v0.8.1
+# fix it, and add a regression test that fails without the fix
+# update CHANGELOG.md
+gh pr create --base main
+# merge → tag on main → back-merge into develop
+```
+
+A hotfix without a regression test is not finished — the reason it is urgent is
+that nothing caught it.
+
+## Reference
+
+| Document | Covers |
+|---|---|
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, branch rules, commit convention, test policy |
+| [docs/BRANCHING.md](docs/BRANCHING.md) | The branch model in full, plus branch-protection settings |
+| [docs/RELEASING.md](docs/RELEASING.md) | Release and hotfix runbook, and the two-repo release order |
+| [docs/REPOSITORY_SETUP.md](docs/REPOSITORY_SETUP.md) | One-time GitHub setup: protection rules, tag rules, Packagist webhook |
+| [SECURITY.md](SECURITY.md) | Private disclosure, supported versions, security-relevant defaults |
+| [CHANGELOG.md](CHANGELOG.md) | What changed in each release |
+| [CHANGES.md](CHANGES.md) | Engineering write-up of the stability audits |
