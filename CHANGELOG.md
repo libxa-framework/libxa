@@ -15,6 +15,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-08
+
+### Added
+
+- **PHP 8.5 support.** `^8.3` already permitted it, but nothing tested it — so
+  support was a claim rather than a fact. CI now runs the full suite on **8.3,
+  8.4 and 8.5**, plus a `--prefer-lowest` build, and `release.yml` re-tests the
+  tagged commit on all three before publishing.
+
+  No source changes were required. The code was audited against every 8.5
+  BC-break: no `(boolean)`/`(integer)`/`(double)`/`(binary)` casts, no backtick
+  operator (`shell_exec` is called as a function, which is unaffected), no
+  `__sleep()`/`__wakeup()`, no `null` array offsets, and every `[]` destructure
+  operates on a value already proven to be an array.
+
+### Fixed
+
+- `ViteManifest::prodTags()` emitted the stylesheet `<link>` twice. A JS entry
+  lists the CSS it imports, and that same file is conventionally passed to
+  `@vite()` explicitly as well, so the standard
+  `@vite(['app.js', 'app.css'])` produced a duplicate tag.
+- `release.yml` rejected correctly annotated tags. `actions/checkout` writes the
+  tag into the runner's local refs as a plain commit pointer, so
+  `git cat-file -t` reported `commit`; the check now asks the GitHub API for the
+  real object type.
+
+### Changed
+
+- `phpunit/phpunit` widened to `^11.5 || ^12.0 || ^13.0` — PHPUnit 11 predates
+  PHP 8.5, and 12+ is the line actively tested against it.
+- `phpstan/phpstan` widened to `^1.10 || ^2.0`.
+
 ## [0.9.0] - 2026-08-08
 
 > **Minor bump, not a patch.** Several fixes below change documented behaviour
@@ -112,6 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Baseline for this changelog. Earlier releases are catalogued in the repository
 history and, for the July 2026 audit, in [CHANGES.md](CHANGES.md).
 
-[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/libxa-framework/libxa/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/libxa-framework/libxa/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/libxa-framework/libxa/releases/tag/v0.8.0
