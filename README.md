@@ -767,3 +767,17 @@ Built with ❤️ using PHP 8.3+
 ---
 
 **LibxaFrame - The Modern PHP Framework**
+
+## Project governance
+
+| Document | What it covers |
+|---|---|
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Local setup, branch rules, commit convention, test policy |
+| [docs/BRANCHING.md](docs/BRANCHING.md) | The branch model — `main` is what Packagist publishes |
+| [docs/RELEASING.md](docs/RELEASING.md) | Release and hotfix runbook |
+| [docs/REPOSITORY_SETUP.md](docs/REPOSITORY_SETUP.md) | One-time GitHub settings: branch protection, tag rules, Packagist webhook |
+| [SECURITY.md](SECURITY.md) | Private vulnerability disclosure and supported versions |
+| [CHANGELOG.md](CHANGELOG.md) | What changed in each release |
+| [CHANGES.md](CHANGES.md) | Engineering write-up of the July and August 2026 stability audits |
+
+Contributions branch from `develop`, never from `main`.
