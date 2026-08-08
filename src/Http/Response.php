@@ -9,6 +9,9 @@ namespace Libxa\Http;
  */
 class Response
 {
+    /** Queued Set-Cookie header values, keyed by cookie name. */
+    protected array $cookies = [];
+
     public function __construct(
         protected int    $status  = 200,
         protected array  $headers = [],
@@ -36,10 +39,53 @@ class Response
         return new static($status, ['Location' => $url], '');
     }
 
-    public static function back(): static
+    /**
+     * Redirect back to the referring page.
+     *
+     * The Referer header is supplied by the client, so echoing it straight
+     * into a Location header turned every "back" redirect into an open
+     * redirect (a phishing link could bounce users off your domain through
+     * your own error handler). Only same-origin referers are honoured.
+     */
+    public static function back(string $fallback = '/'): static
     {
-        $referer = $_SERVER['HTTP_REFERER'] ?? '/';
-        return static::redirect($referer);
+        return static::redirect(static::safeReferer($_SERVER['HTTP_REFERER'] ?? null, $fallback));
+    }
+
+    /**
+     * Reduce a client-supplied referer to a safe, same-origin target.
+     */
+    public static function safeReferer(?string $referer, string $fallback = '/'): string
+    {
+        if ($referer === null || trim($referer) === '') {
+            return $fallback;
+        }
+
+        $parts = parse_url($referer);
+
+        if ($parts === false) {
+            return $fallback;
+        }
+
+        // A relative URL ("/dashboard") has no host and is always same-origin.
+        if (! isset($parts['host'])) {
+            $path = $parts['path'] ?? '/';
+
+            // "//evil.com/x" parses as a path but browsers read it as a host.
+            if (str_starts_with($path, '//')) {
+                return $fallback;
+            }
+
+            return $path
+                . (isset($parts['query']) ? '?' . $parts['query'] : '')
+                . (isset($parts['fragment']) ? '#' . $parts['fragment'] : '');
+        }
+
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+
+        return strcasecmp($parts['host'], (string) preg_replace('/:\d+$/', '', $host)) === 0
+            ? $referer
+            : $fallback;
     }
 
     public function intended(string $default = '/'): static
@@ -92,6 +138,13 @@ class Response
         return $this;
     }
 
+    /**
+     * Queue a cookie on the response.
+     *
+     * Cookies are kept in their own list rather than in $headers: writing them
+     * to $headers['Set-Cookie'] meant each call overwrote the previous one, so
+     * a response could only ever carry a single cookie.
+     */
     public function cookie(
         string $name,
         string $value,
@@ -100,21 +153,51 @@ class Response
         string $domain   = '',
         bool   $secure   = false,
         bool   $httpOnly = true,
+        string $sameSite = 'Lax',
     ): static {
         $expires = $minutes ? time() + ($minutes * 60) : 0;
         $parts   = [
             urlencode($name) . '=' . urlencode($value),
             "Path=$path",
             $expires ? 'Expires=' . gmdate('D, d M Y H:i:s T', $expires) : '',
+            $expires ? 'Max-Age=' . ($minutes * 60) : '',
             $domain  ? "Domain=$domain" : '',
             $secure  ? 'Secure' : '',
             $httpOnly ? 'HttpOnly' : '',
-            'SameSite=Lax',
+            'SameSite=' . $sameSite,
         ];
 
-        $this->headers['Set-Cookie'] = implode('; ', array_filter($parts));
+        $this->cookies[$name] = implode('; ', array_filter($parts));
 
         return $this;
+    }
+
+    /**
+     * Instruct the browser to delete a cookie.
+     */
+    public function forgetCookie(string $name, string $path = '/', string $domain = ''): static
+    {
+        $this->cookies[$name] = implode('; ', array_filter([
+            urlencode($name) . '=deleted',
+            "Path=$path",
+            'Expires=' . gmdate('D, d M Y H:i:s T', 0),
+            'Max-Age=0',
+            $domain ? "Domain=$domain" : '',
+            'HttpOnly',
+            'SameSite=Lax',
+        ]));
+
+        return $this;
+    }
+
+    /**
+     * The queued Set-Cookie header values.
+     *
+     * @return array<string, string>
+     */
+    public function getCookies(): array
+    {
+        return $this->cookies;
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -127,8 +210,26 @@ class Response
             http_response_code($this->status);
 
             foreach ($this->headers as $name => $value) {
-                header("$name: $value");
+                $replace = true;
+                foreach ((array) $value as $single) {
+                    header("$name: $single", $replace);
+                    $replace = false; // subsequent values append
+                }
             }
+
+            // replace:false so several cookies survive in one response.
+            foreach ($this->cookies as $cookie) {
+                header('Set-Cookie: ' . $cookie, replace: false);
+            }
+        }
+
+        // 204/304 and HEAD responses must not carry a body.
+        if ($this->status === 204 || $this->status === 304) {
+            return;
+        }
+
+        if (strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+            return;
         }
 
         echo $this->content;

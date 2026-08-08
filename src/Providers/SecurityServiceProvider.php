@@ -13,16 +13,26 @@ class SecurityServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // Register Encrypter
+        // Register Encrypter. The Encrypter itself now understands the
+        // "base64:" prefix and validates the key length, so the decoding that
+        // used to live here (and silently produced an unusable key when the
+        // base64 was malformed) is gone.
         $this->app->singleton('encrypter', function ($app) {
-            $key = $app->env('APP_KEY');
-            
-            if (str_starts_with((string)$key, 'base64:')) {
-                $key = base64_decode(substr($key, 7));
+            $key = (string) $app::env('APP_KEY', '');
+
+            if ($key === '') {
+                throw new \RuntimeException(
+                    'No application key set. Add APP_KEY to your .env file '
+                    . 'or run `php libxa key:generate`.'
+                );
             }
 
-            return new Encrypter((string)$key);
+            $cipher = (string) ($app->config('app.cipher') ?? 'AES-256-CBC');
+
+            return new Encrypter($key, $cipher);
         });
+
+        $this->app->alias('encrypter', Encrypter::class);
 
         // Register Gate
         $this->app->singleton('gate', function ($app) {

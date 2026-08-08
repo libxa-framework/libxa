@@ -14,7 +14,10 @@ class Session
 {
     protected bool $started = false;
 
-    public function __construct()
+    /**
+     * @param array $config config/session.php, used to configure the cookie.
+     */
+    public function __construct(protected array $config = [])
     {
         $this->start();
     }
@@ -32,14 +35,78 @@ class Session
         // "headers already sent" warnings from banner output.
         if (PHP_SAPI === 'cli') {
             $this->started = false;
+
+            // Give the rest of the framework a usable $_SESSION array so
+            // console commands and tests can read/write session state without
+            // every call site having to null-check.
+            $_SESSION ??= [];
+
+            return;
+        }
+
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $this->started = true;
             return;
         }
 
         if (session_status() === PHP_SESSION_NONE) {
+            $this->applyCookieParams();
             session_start();
         }
 
         $this->started = true;
+    }
+
+    /**
+     * Apply config/session.php to the session cookie.
+     *
+     * None of this was previously wired up: config/session.php shipped with
+     * http_only, same_site, secure, lifetime and cookie-name settings that the
+     * Session class never read, so every application ran on PHP's ini
+     * defaults — in particular no SameSite attribute (CSRF exposure) and,
+     * depending on php.ini, no HttpOnly (session theft via XSS).
+     */
+    protected function applyCookieParams(): void
+    {
+        if (headers_sent()) {
+            return;
+        }
+
+        $lifetime = (int) ($this->config['lifetime'] ?? 120);
+        $sameSite = (string) ($this->config['same_site'] ?? 'Lax');
+
+        if (! in_array(strtolower($sameSite), ['lax', 'strict', 'none'], true)) {
+            $sameSite = 'Lax';
+        }
+
+        $secure = $this->config['secure'] ?? null;
+        $secure = $secure === null
+            // SameSite=None is only honoured on secure cookies.
+            ? (strtolower($sameSite) === 'none' || $this->requestIsSecure())
+            : (bool) $secure;
+
+        session_set_cookie_params([
+            'lifetime' => ($this->config['expire_on_close'] ?? false) ? 0 : $lifetime * 60,
+            'path'     => (string) ($this->config['path'] ?? '/'),
+            'domain'   => (string) ($this->config['domain'] ?? ''),
+            'secure'   => $secure,
+            'httponly' => (bool) ($this->config['http_only'] ?? true),
+            'samesite' => ucfirst(strtolower($sameSite)),
+        ]);
+
+        $name = $this->config['cookie'] ?? null;
+
+        if (is_string($name) && $name !== '' && preg_match('/^[A-Za-z0-9_\-]+$/', $name)) {
+            session_name($name);
+        }
+    }
+
+    protected function requestIsSecure(): bool
+    {
+        $https = $_SERVER['HTTPS'] ?? '';
+
+        return ($https !== '' && strtolower((string) $https) !== 'off')
+            || ($_SERVER['SERVER_PORT'] ?? null) == 443;
     }
 
     public function isStarted(): bool
@@ -92,13 +159,28 @@ class Session
     /**
      * Completely destroy the session (used on logout).
      */
+    /**
+     * Destroy the session and issue a brand-new session ID.
+     *
+     * The old body called session_destroy() and then checked for
+     * PHP_SESSION_NONE — but session_status() stays ACTIVE for the rest of the
+     * request after session_destroy(), so the restart never happened and, more
+     * importantly, the *session ID was never rotated*. Logging out therefore
+     * left the pre-logout identifier valid, which is textbook session fixation.
+     */
     public function invalidate(): void
     {
         $this->flush();
-        session_destroy();
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
+
+        if (PHP_SAPI === 'cli' || session_status() !== PHP_SESSION_ACTIVE) {
+            $this->started = PHP_SAPI !== 'cli';
+            return;
         }
+
+        // true => delete the old session file as well as rotating the ID.
+        session_regenerate_id(true);
+
+        $_SESSION      = [];
         $this->started = true;
     }
 
@@ -111,13 +193,48 @@ class Session
         $_SESSION['_flash']['next'][$key] = $value;
     }
 
+    /** Whether flash data has already been aged during this request. */
+    protected bool $flashAged = false;
+
     /**
-     * Retrieve and clear flash data (usually called by middleware on every request).
+     * Promote flash data staged by the previous request into the readable
+     * 'old' bucket, exactly once per request.
+     *
+     * Several call sites used to invoke this — SessionServiceProvider::boot(),
+     * SessionMiddleware, and ShareErrorsMiddleware — so on a 'web' route it ran
+     * two or three times. The second run moved the now-empty 'next' bucket over
+     * 'old', deleting the messages before any view could read them: that is why
+     * `return back()->with('error', ...)` appeared to do nothing.
      */
     public function ageFlashData(): void
     {
+        if ($this->flashAged) {
+            return;
+        }
+
+        $this->flashAged = true;
+
         $_SESSION['_flash']['old']  = $_SESSION['_flash']['next'] ?? [];
         $_SESSION['_flash']['next'] = [];
+    }
+
+    /**
+     * Keep the current request's flash data for one more request.
+     */
+    public function reflash(): void
+    {
+        $_SESSION['_flash']['next'] = array_merge(
+            $_SESSION['_flash']['next'] ?? [],
+            $_SESSION['_flash']['old'] ?? []
+        );
+    }
+
+    /**
+     * All flash values readable on this request.
+     */
+    public function allFlash(): array
+    {
+        return $_SESSION['_flash']['old'] ?? [];
     }
 
     public function getFlash(string $key, mixed $default = null): mixed
@@ -157,6 +274,10 @@ class Session
      */
     public function regenerate(bool $destroy = false): bool
     {
+        if (PHP_SAPI === 'cli' || session_status() !== PHP_SESSION_ACTIVE) {
+            return false;
+        }
+
         return session_regenerate_id($destroy);
     }
 

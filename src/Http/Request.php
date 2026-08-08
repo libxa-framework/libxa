@@ -26,6 +26,16 @@ class Request
         string           $body     = '',
     ) {
         $this->rawBody = $body;
+        $this->method  = strtoupper($method);
+
+        // Normalise whatever the caller passed so a hand-built Request
+        // (tests, the WebSocket server, console tooling) looks up headers
+        // exactly like one produced by capture().
+        $normalized = [];
+        foreach ($headers as $name => $value) {
+            $normalized[static::normalizeHeaderName((string) $name)] = $value;
+        }
+        $this->headers = $normalized;
     }
 
     /**
@@ -39,11 +49,9 @@ class Request
 
         foreach ($_SERVER as $key => $value) {
             if (str_starts_with($key, 'HTTP_')) {
-                $name = str_replace('_', '-', substr($key, 5));
-                $headers[$name] = $value;
-            } elseif (in_array($key, ['CONTENT_TYPE', 'CONTENT_LENGTH'])) {
-                $name = str_replace('_', '-', $key);
-                $headers[$name] = $value;
+                $headers[static::normalizeHeaderName(substr($key, 5))] = $value;
+            } elseif ($key === 'CONTENT_TYPE' || $key === 'CONTENT_LENGTH') {
+                $headers[static::normalizeHeaderName($key)] = $value;
             }
         }
 
@@ -52,16 +60,24 @@ class Request
         $post = $_POST;
 
         // Handle JSON body
-        if (isset($headers['CONTENT-TYPE']) &&
-            str_contains($headers['CONTENT-TYPE'], 'application/json') &&
+        if (isset($headers['CONTENT_TYPE']) &&
+            str_contains($headers['CONTENT_TYPE'], 'application/json') &&
             $body !== '') {
-            $post = json_decode($body, true) ?? [];
+            $decoded = json_decode($body, true);
+            // Only a JSON *object* maps onto the input bag; a bare scalar or
+            // list would otherwise blow up every $request->input() call.
+            $post = is_array($decoded) ? $decoded : [];
         }
 
-        // Handle method spoofing
-        $spoofed = $_POST['_method'] ?? $post['_method'] ?? $_GET['_method'] ?? null;
-        if ($spoofed && in_array(strtoupper($spoofed), ['PUT', 'PATCH', 'DELETE'])) {
-            $method = strtoupper($spoofed);
+        // Handle method spoofing. Only POST bodies may spoof — honouring
+        // $_GET['_method'] let a plain <a href="/x?_method=DELETE"> link (or
+        // an <img src>) reach a destructive route on a simple navigation.
+        if ($method === 'POST') {
+            $spoofed = $_POST['_method'] ?? $post['_method'] ?? null;
+
+            if (is_string($spoofed) && in_array(strtoupper($spoofed), ['PUT', 'PATCH', 'DELETE'], true)) {
+                $method = strtoupper($spoofed);
+            }
         }
 
         return new static(
@@ -208,10 +224,39 @@ class Request
     //  Headers, Cookies, Files
     // ─────────────────────────────────────────────────────────────────
 
+    /**
+     * Canonical internal header key: upper-case, underscore-separated.
+     *
+     * capture() used to store "CONTENT-TYPE" (dashes) while header() looked up
+     * "CONTENT_TYPE" (underscores), so every multi-word header lookup missed
+     * and silently returned the default. That single mismatch disabled
+     * isAjax(), isJson() and the X-CSRF-TOKEN branch of the CSRF middleware.
+     */
+    public static function normalizeHeaderName(string $key): string
+    {
+        return strtoupper(str_replace('-', '_', $key));
+    }
+
     public function header(string $key, string $default = ''): string
     {
-        $normalized = strtoupper(str_replace('-', '_', $key));
-        return $this->headers[$normalized] ?? $this->headers[$key] ?? $default;
+        $value = $this->headers[static::normalizeHeaderName($key)]
+            ?? $this->headers[$key]
+            ?? $default;
+
+        return is_array($value) ? (string) reset($value) : (string) $value;
+    }
+
+    public function hasHeader(string $key): bool
+    {
+        return isset($this->headers[static::normalizeHeaderName($key)]);
+    }
+
+    /**
+     * All headers, keyed by their canonical (upper snake case) name.
+     */
+    public function headers(): array
+    {
+        return $this->headers;
     }
 
     public function bearerToken(): ?string
@@ -261,17 +306,41 @@ class Request
 
     public function expectsJson(): bool
     {
-        return str_contains($this->header('ACCEPT', ''), 'application/json');
+        $accept = $this->header('Accept');
+
+        if (str_contains($accept, 'application/json') || str_contains($accept, '+json')) {
+            return true;
+        }
+
+        // An XHR that sent a JSON body almost certainly wants JSON back;
+        // without this, API validation failures rendered an HTML redirect.
+        return $this->isAjax() || $this->isJson();
     }
 
     public function isJson(): bool
     {
-        return str_contains($this->header('CONTENT-TYPE', ''), 'application/json');
+        return str_contains($this->header('Content-Type'), 'application/json');
     }
 
     public function isSecure(): bool
     {
-        return ($this->server['HTTPS'] ?? '') === 'on';
+        $https = $this->server['HTTPS'] ?? '';
+
+        if ($https !== '' && strtolower((string) $https) !== 'off') {
+            return true;
+        }
+
+        if (($this->server['SERVER_PORT'] ?? null) == 443) {
+            return true;
+        }
+
+        // Behind a TLS-terminating proxy the origin request is plain HTTP;
+        // only believe the forwarded header when the proxy is trusted.
+        if ($this->ip() !== ($this->server['REMOTE_ADDR'] ?? null)) {
+            return strtolower($this->header('X-Forwarded-Proto')) === 'https';
+        }
+
+        return false;
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -300,11 +369,39 @@ class Request
         return $this->attributes[$key] ?? $default;
     }
 
+    /**
+     * The client IP address.
+     *
+     * X-Forwarded-For is attacker-controlled unless the request actually came
+     * through a proxy you run, so it is only honoured when TRUSTED_PROXIES is
+     * configured. Blindly trusting it (the previous behaviour) let anyone
+     * reset their own rate-limit bucket, or forge audit-log IPs, by sending
+     * one extra header.
+     */
     public function ip(): string
     {
-        return $this->server['HTTP_X_FORWARDED_FOR']
-            ?? $this->server['REMOTE_ADDR']
-            ?? '127.0.0.1';
+        $remote = $this->server['REMOTE_ADDR'] ?? '127.0.0.1';
+
+        $trusted = \Libxa\Foundation\Application::env('TRUSTED_PROXIES', '');
+        $trusted = is_string($trusted) ? array_filter(array_map('trim', explode(',', $trusted))) : [];
+
+        if ($trusted === []) {
+            return $remote;
+        }
+
+        if (! in_array('*', $trusted, true) && ! in_array($remote, $trusted, true)) {
+            return $remote;
+        }
+
+        $forwarded = $this->server['HTTP_X_FORWARDED_FOR'] ?? '';
+        if ($forwarded === '') {
+            return $remote;
+        }
+
+        // The left-most entry is the original client.
+        $candidate = trim(explode(',', $forwarded)[0]);
+
+        return filter_var($candidate, FILTER_VALIDATE_IP) ? $candidate : $remote;
     }
 
     // ─────────────────────────────────────────────────────────────────

@@ -19,8 +19,7 @@ class InitializeTenancy
         $app = Application::getInstance();
 
         // Silently skip if tenancy is not enabled (avoids boot crashes)
-        $enabled = $app?->env('TENANCY_ENABLED', 'false');
-        if ($enabled !== 'true' && $enabled !== '1') {
+        if (! Application::envBool('TENANCY_ENABLED', false)) {
             return $next($request);
         }
 
@@ -31,7 +30,7 @@ class InitializeTenancy
             $app->instance('tenant', $manager);
         } catch (\Throwable $e) {
             // Tenancy boot failure should not kill the whole request in non-strict mode
-            if ($app->config('app.debug') || $app->env('APP_DEBUG') === 'true') {
+            if ($app->config('app.debug') || Application::envBool('APP_DEBUG', false)) {
                 throw $e;
             }
         }

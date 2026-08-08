@@ -37,7 +37,8 @@ class TenancyManager
 
     public function isEnabled(): bool
     {
-        return config('tenancy.enabled', false) || $this->app->env('TENANCY_ENABLED') === 'true';
+        return (bool) config('tenancy.enabled', false)
+            || \Libxa\Foundation\Application::envBool('TENANCY_ENABLED', false);
     }
 
     public function getTenant(): ?string

@@ -6,14 +6,90 @@ namespace Libxa\Security;
 
 use RuntimeException;
 
+/**
+ * Authenticated symmetric encryption (encrypt-then-MAC).
+ *
+ * Stability/security notes:
+ *  - The key length is now validated against the cipher. AES-256-CBC needs
+ *    exactly 32 bytes; openssl silently NUL-pads a short key, so a truncated
+ *    or misconfigured APP_KEY used to produce quietly weakened ciphertext
+ *    that still round-tripped correctly in local testing.
+ *  - "base64:..." keys (the format key:generate emits, and the format every
+ *    Laravel-shaped .env uses) are decoded instead of being used as literal
+ *    ASCII.
+ *  - decrypt() unserializes with allowed_classes => false. The MAC makes
+ *    forged payloads impractical, but if a key ever leaks, object injection
+ *    turns "attacker can read your session" into remote code execution.
+ *  - A payload whose iv/value/mac fields are arrays (trivially sent by an
+ *    attacker as ?payload[iv][]=x) used to reach base64_decode()/hash_equals()
+ *    with an array argument and crash with a TypeError — an unauthenticated
+ *    500 on any endpoint that decrypts user input.
+ */
 class Encrypter
 {
     protected string $key;
-    protected string $cipher = 'AES-256-CBC';
+    protected string $cipher;
 
-    public function __construct(string $key)
+    /** cipher => required key length in bytes */
+    protected const SUPPORTED = [
+        'AES-128-CBC' => 16,
+        'AES-256-CBC' => 32,
+        'AES-128-GCM' => 16,
+        'AES-256-GCM' => 32,
+    ];
+
+    public function __construct(string $key, string $cipher = 'AES-256-CBC')
     {
-        $this->key = $key;
+        $key    = static::normalizeKey($key);
+        $cipher = strtoupper($cipher);
+
+        if (! static::supported($key, $cipher)) {
+            $expected = static::SUPPORTED[$cipher] ?? null;
+
+            throw new RuntimeException($expected === null
+                ? "Unsupported cipher [{$cipher}]. Supported: " . implode(', ', array_keys(static::SUPPORTED)) . '.'
+                : "The application key must be {$expected} bytes long for {$cipher}; got " . strlen($key) . '. '
+                  . 'Run `php libxa key:generate` to create a valid APP_KEY.');
+        }
+
+        $this->key    = $key;
+        $this->cipher = $cipher;
+    }
+
+    /**
+     * Decode a "base64:..." key into its raw bytes.
+     */
+    public static function normalizeKey(string $key): string
+    {
+        if (str_starts_with($key, 'base64:')) {
+            $decoded = base64_decode(substr($key, 7), true);
+
+            if ($decoded === false) {
+                throw new RuntimeException('The application key is not valid base64.');
+            }
+
+            return $decoded;
+        }
+
+        return $key;
+    }
+
+    public static function supported(string $key, string $cipher): bool
+    {
+        $cipher = strtoupper($cipher);
+
+        return isset(static::SUPPORTED[$cipher])
+            && strlen($key) === static::SUPPORTED[$cipher];
+    }
+
+    /**
+     * Generate a cryptographically secure key for a cipher.
+     */
+    public static function generateKey(string $cipher = 'AES-256-CBC'): string
+    {
+        $length = static::SUPPORTED[strtoupper($cipher)] ?? 32;
+
+        return random_bytes($length);
     }
 
     /**
@@ -21,9 +97,15 @@ class Encrypter
      */
     public function encrypt(mixed $value, bool $serialize = true): string
     {
-        $iv = random_bytes(openssl_cipher_iv_length($this->cipher));
-        
-        $value = $serialize ? serialize($value) : $value;
+        $ivLength = openssl_cipher_iv_length($this->cipher);
+
+        if ($ivLength === false) {
+            throw new RuntimeException("Could not determine the IV length for [{$this->cipher}].");
+        }
+
+        $iv = random_bytes($ivLength);
+
+        $value = $serialize ? serialize($value) : (string) $value;
         $value = openssl_encrypt($value, $this->cipher, $this->key, 0, $iv);
 
         if ($value === false) {
@@ -34,7 +116,7 @@ class Encrypter
 
         $json = json_encode(compact('iv', 'value', 'mac'), JSON_UNESCAPED_SLASHES);
 
-        if (json_last_error() !== JSON_ERROR_NONE) {
+        if ($json === false || json_last_error() !== JSON_ERROR_NONE) {
             throw new RuntimeException('Could not encrypt the data.');
         }
 
@@ -48,7 +130,11 @@ class Encrypter
     {
         $payload = $this->getJsonPayload($payload);
 
-        $iv = base64_decode($payload['iv']);
+        $iv = base64_decode($payload['iv'], true);
+
+        if ($iv === false) {
+            throw new RuntimeException('The payload is invalid.');
+        }
 
         $decrypted = openssl_decrypt(
             $payload['value'], $this->cipher, $this->key, 0, $iv
@@ -58,7 +144,19 @@ class Encrypter
             throw new RuntimeException('Could not decrypt the data.');
         }
 
-        return $unserialize ? unserialize($decrypted) : $decrypted;
+        if (! $unserialize) {
+            return $decrypted;
+        }
+
+        // allowed_classes => false: never instantiate arbitrary classes from
+        // ciphertext, even authenticated ciphertext.
+        $value = unserialize($decrypted, ['allowed_classes' => false]);
+
+        if ($value === false && $decrypted !== serialize(false)) {
+            throw new RuntimeException('Could not decrypt the data.');
+        }
+
+        return $value;
     }
 
     /**
@@ -66,7 +164,7 @@ class Encrypter
      */
     protected function hash(string $iv, string $value): string
     {
-        return hash_hmac('sha256', $iv.$value, $this->key);
+        return hash_hmac('sha256', $iv . $value, $this->key);
     }
 
     /**
@@ -74,13 +172,19 @@ class Encrypter
      */
     protected function getJsonPayload(string $payload): array
     {
-        $payload = json_decode(base64_decode($payload), true);
+        $decoded = base64_decode($payload, true);
 
-        if (!$this->validPayload($payload)) {
+        if ($decoded === false) {
             throw new RuntimeException('The payload is invalid.');
         }
 
-        if (!$this->validMac($payload)) {
+        $payload = json_decode($decoded, true);
+
+        if (! $this->validPayload($payload)) {
+            throw new RuntimeException('The payload is invalid.');
+        }
+
+        if (! $this->validMac($payload)) {
             throw new RuntimeException('The MAC is invalid.');
         }
 
@@ -92,8 +196,21 @@ class Encrypter
      */
     protected function validPayload(mixed $payload): bool
     {
-        return is_array($payload) && isset($payload['iv'], $payload['value'], $payload['mac']) &&
-               strlen(base64_decode($payload['iv'], true)) === openssl_cipher_iv_length($this->cipher);
+        if (! is_array($payload) || ! isset($payload['iv'], $payload['value'], $payload['mac'])) {
+            return false;
+        }
+
+        // Every field must be a string before it reaches base64_decode(),
+        // openssl_decrypt() or hash_equals(), all of which TypeError on arrays.
+        foreach (['iv', 'value', 'mac'] as $field) {
+            if (! is_string($payload[$field])) {
+                return false;
+            }
+        }
+
+        $iv = base64_decode($payload['iv'], true);
+
+        return $iv !== false && strlen($iv) === openssl_cipher_iv_length($this->cipher);
     }
 
     /**
@@ -101,8 +218,6 @@ class Encrypter
      */
     protected function validMac(array $payload): bool
     {
-        $calculated = $this->hash($payload['iv'], $payload['value']);
-
-        return hash_equals($payload['mac'], $calculated);
+        return hash_equals($this->hash($payload['iv'], $payload['value']), $payload['mac']);
     }
 }

@@ -34,8 +34,12 @@ class HttpKernel
      * Middleware groups — applied when a route uses them.
      */
     protected array $middlewareGroups = [
+        // SessionMiddleware is already in the global stack above; listing it
+        // here too made every 'web' route start the session and age its flash
+        // data twice, which consumed one-request flash messages before the
+        // view could read them.
         'web' => [
-            \Libxa\Http\Middleware\SessionMiddleware::class,
+            \Libxa\Http\Middleware\ShareErrorsMiddleware::class,
         ],
         'api' => [
             \Libxa\Http\Middleware\ThrottleMiddleware::class . ':60',
@@ -67,10 +71,40 @@ class HttpKernel
         try {
             $response = $this->sendThroughPipeline($request);
         } catch (\Throwable $e) {
-            $response = $this->handleException($e, $request);
+            try {
+                $response = $this->handleException($e, $request);
+            } catch (\Throwable $fatal) {
+                // The handler itself can fail — back() needs a session,
+                // renderDebugException needs a working Response, a custom
+                // handler may throw. Without this net the process dies with a
+                // blank 500 and the *original* exception is lost entirely.
+                $response = $this->renderHandlerFailure($e, $fatal);
+            }
         }
 
         return $response;
+    }
+
+    /**
+     * Last-resort response for when the exception handler itself threw.
+     */
+    protected function renderHandlerFailure(\Throwable $original, \Throwable $fatal): Response
+    {
+        error_log('[LibxaFrame] Exception handler failed: ' . $fatal->getMessage()
+            . ' (while handling: ' . $original->getMessage() . ')');
+
+        if (! $this->isDebug()) {
+            return new Response(500, ['Content-Type' => 'text/html; charset=utf-8'], $this->renderProductionError());
+        }
+
+        $body = "Original exception:\n" . $original . "\n\n"
+              . "Then the exception handler failed with:\n" . $fatal;
+
+        return new Response(
+            500,
+            ['Content-Type' => 'text/plain; charset=utf-8'],
+            $body
+        );
     }
 
     /**
@@ -78,9 +112,26 @@ class HttpKernel
      */
     public function terminate(Request $request, Response $response): void
     {
-        foreach ($this->bootedMiddleware() as $middleware) {
-            if (method_exists($middleware, 'terminate')) {
-                $middleware->terminate($request, $response);
+        // bootedMiddleware() always returned [], so terminate() was a no-op
+        // and terminable middleware never ran. Resolve the configured global
+        // middleware and call terminate() on whichever declare it.
+        foreach ($this->middleware as $pipe) {
+            $class = is_string($pipe) ? explode(':', $pipe, 2)[0] : $pipe;
+
+            try {
+                $instance = is_object($class) ? $class : $this->app->make($class);
+            } catch (\Throwable) {
+                continue;
+            }
+
+            if (method_exists($instance, 'terminate')) {
+                try {
+                    $instance->terminate($request, $response);
+                } catch (\Throwable $e) {
+                    // A failing terminate() must not corrupt an
+                    // already-sent response.
+                    $this->reportException($e);
+                }
             }
         }
     }
@@ -100,42 +151,95 @@ class HttpKernel
             ->then(fn(Request $req) => $router->dispatch($req));
     }
 
+    /**
+     * Whether the app is in debug mode (verbose error pages).
+     */
+    protected function isDebug(): bool
+    {
+        $configured = $this->app->config('app.debug');
+
+        if ($configured !== null) {
+            return (bool) $configured;
+        }
+
+        return Application::envBool('APP_DEBUG', false);
+    }
+
     protected function handleException(\Throwable $e, Request $request): Response
     {
         if ($e instanceof \Libxa\Validation\ValidationException) {
-            if ($request->expectsJson() || $request->isAjax()) {
+            if ($request->expectsJson()) {
                 return $e->toResponse();
             }
 
-            return back()
+            return \Libxa\Http\Response::back()
                 ->with('errors', $e->errors())
-                ->with('old', $request->except(['password', 'password_confirmation']));
+                ->with('old', $request->except(['password', 'password_confirmation', '_token']));
         }
 
         if ($e instanceof \Libxa\Http\Exceptions\HttpException) {
-            return $this->renderHttpException($e);
+            $response = $request->expectsJson()
+                ? new \Libxa\Http\JsonResponse(
+                    ['message' => $e->getMessage() ?: 'HTTP error'],
+                    $e->getStatusCode()
+                )
+                : $this->renderHttpException($e);
+
+            // Headers carried by the exception (Retry-After on a 429,
+            // WWW-Authenticate on a 401) used to be dropped on the floor.
+            return $e->getHeaders() === [] ? $response : $response->withHeaders($e->getHeaders());
         }
 
-        $debug = $this->app->config('app.debug')
-            || $this->app->env('APP_DEBUG') === 'true'
-            || $this->app->env('APP_DEBUG') === true
-            || getenv('APP_DEBUG') === 'true'
-            || ($_ENV['APP_DEBUG'] ?? '') === 'true';
+        // Unexpected exceptions are always worth a log line, in every
+        // environment — production previously swallowed them silently.
+        $this->reportException($e);
 
-        if ($debug) {
-            return $this->renderDebugException($e);
+        if (! $this->isDebug()) {
+            if ($request->expectsJson()) {
+                return new \Libxa\Http\JsonResponse(['message' => 'Server Error'], 500);
+            }
+
+            return new Response(500, ['Content-Type' => 'text/html; charset=utf-8'], $this->renderProductionError());
         }
 
-        return new Response(500, [], $this->renderProductionError());
+        if ($request->expectsJson()) {
+            return new \Libxa\Http\JsonResponse([
+                'message'   => $e->getMessage(),
+                'exception' => $e::class,
+                'file'      => $e->getFile(),
+                'line'      => $e->getLine(),
+                'trace'     => array_slice($e->getTrace(), 0, 20),
+            ], 500);
+        }
+
+        return $this->renderDebugException($e);
+    }
+
+    protected function reportException(\Throwable $e): void
+    {
+        try {
+            if ($this->app->has('logger')) {
+                $this->app->make('logger')->error($e->getMessage(), ['exception' => $e]);
+                return;
+            }
+        } catch (\Throwable) {
+            // Fall through to error_log below.
+        }
+
+        error_log('[LibxaFrame] ' . $e::class . ': ' . $e->getMessage()
+            . ' in ' . $e->getFile() . ':' . $e->getLine());
     }
 
     protected function renderDebugException(\Throwable $e): Response
     {
-        $class   = get_class($e);
-        $message = htmlspecialchars($e->getMessage());
-        $file    = $e->getFile();
-        $line    = $e->getLine();
-        $trace   = htmlspecialchars($e->getTraceAsString());
+        // Every interpolated value is attacker-influenced (an exception
+        // message routinely contains user input), so all of them are escaped —
+        // $file/$class/$line used to be injected into the HTML raw.
+        $class   = htmlspecialchars(get_class($e), ENT_QUOTES, 'UTF-8');
+        $message = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+        $file    = htmlspecialchars($e->getFile(), ENT_QUOTES, 'UTF-8');
+        $line    = (int) $e->getLine();
+        $trace   = htmlspecialchars($e->getTraceAsString(), ENT_QUOTES, 'UTF-8');
 
         $html = <<<HTML
         <!DOCTYPE html>
@@ -174,7 +278,12 @@ class HttpKernel
             429 => 'Too Many Requests', 500 => 'Internal Server Error',
         ];
 
-        $message = $e->getMessage() ?: ($msgs[$code] ?? 'Something went wrong');
+        $message = htmlspecialchars(
+            $e->getMessage() ?: ($msgs[$code] ?? 'Something went wrong'),
+            ENT_QUOTES,
+            'UTF-8'
+        );
+        $code = (int) $code;
 
         $html = <<<HTML
         <!DOCTYPE html>
@@ -205,9 +314,24 @@ class HttpKernel
         return '<!DOCTYPE html><html><head><title>Server Error</title></head><body style="background:#0a0a0c;color:#fff;text-align:center;padding:50px;font-family:sans-serif;"><h1>500 — Server Error</h1><p>Something went wrong. Please try again later.</p></body></html>';
     }
 
-    protected function bootedMiddleware(): array
+    /**
+     * The global middleware stack, in execution order.
+     */
+    public function getMiddleware(): array
     {
-        return [];
+        return $this->middleware;
+    }
+
+    /**
+     * Append middleware to the global stack (used by packages/modules).
+     */
+    public function pushMiddleware(string $middleware): static
+    {
+        if (! in_array($middleware, $this->middleware, true)) {
+            $this->middleware[] = $middleware;
+        }
+
+        return $this;
     }
 
     public function getMiddlewareAliases(): array

@@ -1,5 +1,11 @@
-﻿/vendor
+/vendor
+
+# This is a library: the lock file is not committed so consumers resolve
+# their own dependency versions.
 composer.lock
+
 .phpunit.result.cache
-.idea
-.vscode
+.phpunit.cache
+
+/.idea
+/.vscode

@@ -1,0 +1,107 @@
+# Changelog
+
+All notable changes to LibxaFrame are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+> **Pre-1.0 note.** Composer treats the *minor* number as the compatibility
+> boundary below 1.0: `^0.8.0` allows `0.8.9` but not `0.9.0`. Anything that
+> breaks a documented API therefore requires a minor bump, not a patch.
+
+> The detailed engineering write-up of the July and August 2026 stability
+> audits — every bug, why it mattered, and how it was fixed — lives in
+> [CHANGES.md](CHANGES.md). This file is the user-facing summary.
+
+## [Unreleased]
+
+### Added
+
+- Middleware groups are now expanded by the pipeline, so `Route::middleware('web')`
+  works. Groups can be registered at runtime with `Pipeline::addGroup()`.
+- `405 Method Not Allowed` with an `Allow` header, instead of a `404` for a
+  route that exists under a different verb.
+- Route parameter constraints: `$route->where('id', '\d+')`.
+- `Application::envBool()` for reading boolean environment variables.
+- `Request::hasHeader()`, `Request::headers()`, `Response::forgetCookie()`,
+  `Response::getCookies()`, `Schema::reset()`, `Container::forgetInstance()`,
+  `ConnectionPool::setConnection()`/`reset()`/`resetInstance()`.
+- `QueryBuilder::orderByRaw()`, `avg()`, `chunk()`, `orWhereNull()`,
+  `orWhereNotNull()`, and `rightJoin()`.
+- CSRF exemptions via `session.csrf_except`, with wildcard support, plus
+  `X-XSRF-TOKEN` header support.
+- `Async\ParallelException`, aggregating failures from `Parallel::run()`.
+
+### Fixed
+
+- **Attribute routing** (`#[Route]`, `#[Prefix]`, `#[Middleware]`) works at all.
+  Every attribute class lived in a single file, so PSR-4 could never load them.
+- **Optional route parameters** (`/users/{id?}`) match the bare path.
+- **Soft-deleting models** are queryable — the delete filter produced invalid
+  SQL as soon as a `where()` was added.
+- **`where('column', null)`** produces `IS NULL` instead of a comparison that
+  can never be true.
+- **Header lookups** — every multi-word header (`Content-Type`,
+  `X-Requested-With`, `X-CSRF-TOKEN`) silently returned the default, which
+  disabled `isAjax()`, `isJson()` and header-based CSRF.
+- **`env()` with falsy values** — `APP_DEBUG=0` no longer behaves as unset.
+- **The `integer` validation rule accepts `0`**, and `min`/`max` compare the
+  value rather than its string length for numeric fields.
+- **`unique`/`exists` no longer pass silently** when the database is
+  unreachable or the table name is wrong.
+- **Flash data survives to the view** — it was being aged three times per
+  request, wiping the bag before anything could read it.
+- **Migrations with a class/filename mismatch fail loudly** instead of being
+  skipped silently.
+- **`Schema::` follows the current connection** rather than the first PDO it
+  ever saw.
+- **Responses can carry more than one cookie.**
+- **`Route::prefix()->group()` no longer leaks** its prefix onto every route
+  registered afterwards.
+- `resource()` registers `PATCH` as well as `PUT`, and `/{id}/create` before
+  `/{id}`.
+- Circular container dependencies raise a clear exception instead of exhausting
+  the stack.
+- `Cannot redeclare class ContextualBindingBuilder` — it was declared twice.
+- Service providers are registered and booted exactly once per class.
+- `ThrottleMiddleware` accepts its `throttle:60` parameters (a `TypeError`
+  crashed the entire built-in `api` middleware group).
+- The `.env` parser handles quoted values, inline comments and `export`.
+- Path helpers no longer mix `/` and `\` on Windows.
+
+### Security
+
+- **SQL injection in `orderBy()`** — both column and direction were
+  interpolated verbatim. Also fixed in `join()` and the aggregate helpers.
+- **Open redirect in every `back()`** — the client-supplied `Referer` was
+  written straight into the `Location` header.
+- **Session fixation on logout** — the session ID was never rotated.
+- **`X-Forwarded-For` spoofing** — now only honoured from a configured
+  `TRUSTED_PROXIES`.
+- **`_method` spoofing from the query string** — restricted to POST bodies.
+- **Unrestricted `unserialize()`** in the encrypter — now
+  `allowed_classes => false`.
+- **Unvalidated `APP_KEY` length** — openssl silently NUL-pads a short key,
+  producing quietly weakened ciphertext.
+- **Unescaped output on the debug error page.**
+- Session cookies now apply `config/session.php` (`http_only`, `same_site`,
+  `secure`, `lifetime`), which the framework previously ignored entirely.
+- Array-valued `_token` and encrypter payload fields no longer raise an
+  uncatchable `TypeError` (an unauthenticated 500 on every form endpoint).
+
+### Changed
+
+- Unresolvable container dependencies raise `RuntimeException` instead of
+  injecting `null`.
+- `app()` throws when the application has not been bootstrapped, rather than
+  returning `null`.
+- `Validator::validated()` returns only submitted fields.
+- Unhandled exceptions are always logged, and never leak details in production.
+
+## [0.8.0] - 2026-07-XX
+
+Baseline for this changelog. Earlier releases are catalogued in the repository
+history and, for the July 2026 audit, in [CHANGES.md](CHANGES.md).
+
+[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/libxa-framework/libxa/releases/tag/v0.8.0

@@ -1,6 +1,6 @@
 {
     "name": "libxa/framework",
-    "description": "LibxaFrame core framework — Foundation, Router, Atlas ORM, Blade-X, Reactive, Modules, Frontend Adapters.",
+    "description": "LibxaFrame core framework \u2014 Foundation, Router, Atlas ORM, Blade-X, Reactive, Modules, Frontend Adapters.",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -39,5 +39,51 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "scripts": {
+        "test": "phpunit --no-coverage",
+        "test:unit": "phpunit --no-coverage --testsuite Unit",
+        "test:feature": "phpunit --no-coverage --testsuite Feature",
+        "test:coverage": "phpunit --coverage-text",
+        "lint": "@php tools/lint.php",
+        "check": [
+            "@lint",
+            "@test",
+            "composer audit --no-interaction"
+        ]
+    },
+    "scripts-descriptions": {
+        "test": "Run the full test suite",
+        "test:unit": "Run only the unit suite",
+        "test:feature": "Run only the feature suite",
+        "lint": "Syntax-check every source file",
+        "check": "Everything CI runs, locally"
+    },
+    "support": {
+        "issues": "https://github.com/libxa-framework/libxa/issues",
+        "source": "https://github.com/libxa-framework/libxa",
+        "docs": "https://github.com/libxa-framework/libxa#readme",
+        "security": "https://github.com/libxa-framework/libxa/security/policy"
+    },
+    "authors": [
+        {
+            "name": "Voukeng Dongmo Franky Steve",
+            "email": "libxa@vyloxi.com",
+            "role": "Maintainer"
+        }
+    ],
+    "keywords": [
+        "framework",
+        "php",
+        "router",
+        "orm",
+        "blade",
+        "websockets",
+        "async",
+        "fibers"
+    ],
+    "homepage": "https://github.com/libxa-framework/libxa",
+    "config": {
+        "sort-packages": true
+    }
 }

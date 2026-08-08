@@ -42,7 +42,7 @@ class AiQueryBridge
     public static function ask(string $question, ?string $modelClass = null): AiQueryResult
     {
         $app     = \Libxa\Foundation\Application::getInstance();
-        $enabled = $app?->env('ATLAS_AI_ENABLED', 'false') === 'true';
+        $enabled = \Libxa\Foundation\Application::envBool('ATLAS_AI_ENABLED', false);
 
         if (! $enabled) {
             return AiQueryResult::disabled($question);
@@ -95,7 +95,7 @@ class AiQueryBridge
     public static function generate(string $description, ?string $modelClass = null): string
     {
         $app     = \Libxa\Foundation\Application::getInstance();
-        $enabled = $app?->env('ATLAS_AI_ENABLED', 'false') === 'true';
+        $enabled = \Libxa\Foundation\Application::envBool('ATLAS_AI_ENABLED', false);
 
         if (! $enabled) {
             return "// AI Query Bridge disabled. Set ATLAS_AI_ENABLED=true in .env\n";
@@ -193,7 +193,7 @@ class AiQueryBridge
     protected static function logQuery(string $question, string $sql): void
     {
         $app     = \Libxa\Foundation\Application::getInstance();
-        $logAll  = $app?->env('ATLAS_QUERY_LOG', 'true') === 'true';
+        $logAll  = \Libxa\Foundation\Application::envBool('ATLAS_QUERY_LOG', true);
 
         if (! $logAll) return;
 
@@ -208,214 +208,5 @@ class AiQueryBridge
         if (! is_dir($logDir)) mkdir($logDir, 0755, true);
 
         file_put_contents("$logDir/atlas-ai.log", $log, FILE_APPEND | LOCK_EX);
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────
-//  Result Object
-// ─────────────────────────────────────────────────────────────────────
-
-final class AiQueryResult
-{
-    public function __construct(
-        public readonly string  $question,
-        public readonly string  $sql,
-        public readonly bool    $safe,
-        public readonly array   $data,
-        public readonly ?string $error,
-        public readonly string  $status = 'ok',
-    ) {}
-
-    public static function disabled(string $question): static
-    {
-        return new static($question, '', false, [], 'AI Query Bridge is disabled. Set ATLAS_AI_ENABLED=true.', 'disabled');
-    }
-
-    public static function noDriver(string $question, string $provider): static
-    {
-        return new static($question, '', false, [], "No driver implemented for provider: $provider. Create Libxa\\Atlas\\AI\\Drivers\\{$provider}Driver.", 'no_driver');
-    }
-
-    public static function unsafe(string $question, string $sql): static
-    {
-        return new static($question, $sql, false, [], 'Generated SQL was blocked (contains destructive operation).', 'unsafe');
-    }
-
-    public static function executionError(string $question, string $sql, string $error): static
-    {
-        return new static($question, $sql, true, [], $error, 'execution_error');
-    }
-
-    public function succeeded(): bool { return $this->status === 'ok'; }
-    public function failed(): bool    { return $this->status !== 'ok'; }
-
-    public function toArray(): array
-    {
-        return [
-            'question' => $this->question,
-            'sql'      => $this->sql,
-            'safe'     => $this->safe,
-            'data'     => $this->data,
-            'error'    => $this->error,
-            'status'   => $this->status,
-        ];
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────
-//  Driver Contract
-// ─────────────────────────────────────────────────────────────────────
-
-interface AiDriverContract
-{
-    /** Generate a SQL SELECT query from an English question and schema context */
-    public function generateSql(string $question, string $schemaContext): string;
-
-    /** Generate a PHP scope method body from an English description */
-    public function generateScope(string $description, string $schemaContext): string;
-}
-
-// ─────────────────────────────────────────────────────────────────────
-//  Driver Stubs — implement these to enable AI queries
-// ─────────────────────────────────────────────────────────────────────
-
-namespace Libxa\Atlas\AI\Drivers;
-
-use Libxa\Http\Client;
-
-class OpenAiDriver implements \Libxa\Atlas\AI\AiDriverContract
-{
-    public function generateSql(string $question, string $schemaContext): string
-    {
-        $app = \Libxa\Foundation\Application::getInstance();
-        $key = $app->env('OPENAI_API_KEY');
-        
-        if (empty($key)) {
-            throw new \RuntimeException('Missing OPENAI_API_KEY in .env');
-        }
-
-        $dbDriver = strtoupper($app->env('DB_DRIVER', 'sqlite'));
-
-        $client = new Client([
-            'headers' => [
-                'Authorization' => "Bearer {$key}",
-                'Content-Type'  => 'application/json',
-            ]
-        ]);
-
-        $prompt = "Given this database schema:\n{$schemaContext}\n\nWrite a safe, read-only $dbDriver SQL SELECT query for the following request:\n\"{$question}\"\n\nReturn ONLY the SQL string, no markdown, no explanation. Ensure functions and syntax are strict $dbDriver compatible.";
-
-
-        $baseUrl = rtrim($app->env('AI_BASE_URL', 'https://api.openai.com/v1'), '/');
-        $response = $client->post($baseUrl . '/chat/completions', [
-            'model' => $app->env('ATLAS_AI_MODEL', 'gpt-4o-mini'),
-            'messages' => [
-                ['role' => 'system', 'content' => 'You are a SQL expert. You only output raw SQL SELECT statements.'],
-                ['role' => 'user', 'content' => $prompt]
-            ],
-            'temperature' => 0,
-        ]);
-
-        if (isset($response['body']['error'])) {
-            throw new \RuntimeException('AI API Error: ' . json_encode($response['body']['error']));
-        }
-
-        $sql = $response['body']['choices'][0]['message']['content'] ?? '';
-        if ($sql === '') {
-            throw new \RuntimeException('AI API returned empty content: ' . json_encode($response['body']));
-        }
-        
-        return $this->cleanSql($sql);
-
-    }
-
-    public function generateScope(string $description, string $schemaContext): string
-    {
-        $app = \Libxa\Foundation\Application::getInstance();
-        $key = $app->env('OPENAI_API_KEY');
-
-        $client = new Client([
-            'headers' => [
-                'Authorization' => "Bearer {$key}",
-                'Content-Type'  => 'application/json',
-            ]
-        ]);
-
-        $prompt = "Given this database schema:\n{$schemaContext}\n\nGenerate a PHP method body for an Atlas ORM scope that fulfills this description:\n\"{$description}\"\n\nUse standard Libxa\\Atlas\\QueryBuilder methods like where(), orderBy(), limit().\n\nReturn ONLY the PHP code, no tags, no markdown.";
-
-        $baseUrl = rtrim($app->env('AI_BASE_URL', 'https://api.openai.com/v1'), '/');
-        $response = $client->post($baseUrl . '/chat/completions', [
-            'model' => $app->env('ATLAS_AI_MODEL', 'gpt-4o-mini'),
-            'messages' => [
-                ['role' => 'system', 'content' => 'You are a PHP framework expert.'],
-                ['role' => 'user', 'content' => $prompt]
-            ],
-            'temperature' => 0,
-        ]);
-
-        return trim($response['body']['choices'][0]['message']['content'] ?? '', " \t\n\r\0\x0B` ");
-    }
-
-    protected function cleanSql(string $sql): string
-    {
-        // Try to extract content inside ```sql ... ``` block
-        if (preg_match('/```sql\s*(.*?)\s*```/is', $sql, $matches)) {
-            $sql = $matches[1];
-        } elseif (preg_match('/```(.*?)```/is', $sql, $matches)) {
-            $sql = $matches[1];
-        } else {
-            // Find the first occurrence of SELECT to ignore conversational prefixes
-            $pos = stripos($sql, 'SELECT');
-            if ($pos !== false) {
-                $sql = substr($sql, $pos);
-            }
-        }
-        
-        return trim($sql, " \t\n\r\0\x0B;");
-    }
-
-}
-
-class AnthropicDriver implements \Libxa\Atlas\AI\AiDriverContract
-{
-    public function generateSql(string $question, string $schemaContext): string
-    {
-        throw new \RuntimeException('Anthropic driver not yet implemented.');
-    }
-
-    public function generateScope(string $description, string $schemaContext): string
-    {
-        throw new \RuntimeException('Anthropic driver not yet implemented.');
-    }
-}
-
-class GeminiDriver implements \Libxa\Atlas\AI\AiDriverContract
-{
-    public function generateSql(string $question, string $schemaContext): string
-    {
-        throw new \RuntimeException('Gemini driver not yet implemented.');
-    }
-
-    public function generateScope(string $description, string $schemaContext): string
-    {
-        throw new \RuntimeException('Gemini driver not yet implemented.');
-    }
-}
-
-class TestDriver implements \Libxa\Atlas\AI\AiDriverContract
-{
-    public function generateSql(string $question, string $schemaContext): string
-    {
-        // Simple heuristic for testing without making API calls
-        if (stripos($question, 'count') !== false) {
-            return "SELECT COUNT(*) FROM users;";
-        }
-        
-        return "SELECT * FROM users LIMIT 10;";
-    }
-
-    public function generateScope(string $description, string $schemaContext): string
-    {
-        return "return \$query->where('active', 1);";
     }
 }

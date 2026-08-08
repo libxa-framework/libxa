@@ -26,10 +26,13 @@ class Application extends Container
     /** Whether the application has been bootstrapped */
     protected bool $booted = false;
 
-    /** Registered service providers */
+    /** Whether boot() is currently in progress (re-entrancy guard) */
+    protected bool $booting = false;
+
+    /** Registered service providers, keyed by class name */
     protected array $providers = [];
 
-    /** Booted service providers */
+    /** Booted service provider class names => true */
     protected array $bootedProviders = [];
 
     /** Runtime context: http | cli | queue | test | ws */
@@ -64,13 +67,31 @@ class Application extends Container
             return;
         }
 
-        $this->loadPackages();
-        $this->loadModules();
+        // Re-entrancy guard: a provider whose boot() reaches back into
+        // app()->boot() (directly or through a helper) used to recurse until
+        // the stack blew, because $booted was only set at the very end.
+        if ($this->booting) {
+            return;
+        }
 
-        foreach ($this->providers as $provider) {
-            if (! in_array($provider, $this->bootedProviders)) {
-                $this->bootProvider($provider);
-            }
+        $this->booting = true;
+
+        try {
+            $this->loadPackages();
+            $this->loadModules();
+
+            // Iterate over a snapshot — bootProvider() may register further
+            // providers, and mutating $this->providers mid-foreach is undefined.
+            // Loop until the set stabilises so late arrivals still get booted.
+            do {
+                $pending = array_diff_key($this->providers, $this->bootedProviders);
+
+                foreach ($pending as $provider) {
+                    $this->bootProvider($provider);
+                }
+            } while ($pending !== []);
+        } finally {
+            $this->booting = false;
         }
 
         $this->booted = true;
@@ -139,14 +160,24 @@ class Application extends Container
     /**
      * Register + boot a service provider.
      */
-    public function register(string|object $provider): static
+    public function register(string|object $provider, bool $force = false): static
     {
+        $class = is_string($provider) ? $provider : $provider::class;
+
+        // A provider reachable from several discovery paths (core list,
+        // config/app.php, package manifest, module manifest) used to be
+        // registered once per path — duplicating every route, event listener
+        // and console command it declares.
+        if (! $force && isset($this->providers[$class])) {
+            return $this;
+        }
+
         if (is_string($provider)) {
             $provider = new $provider($this);
         }
 
         $provider->register();
-        $this->providers[] = $provider;
+        $this->providers[$class] = $provider;
 
         if ($this->booted) {
             $this->bootProvider($provider);
@@ -155,12 +186,30 @@ class Application extends Container
         return $this;
     }
 
+    /**
+     * Whether a provider class has already been registered.
+     */
+    public function providerIsRegistered(string $class): bool
+    {
+        return isset($this->providers[$class]);
+    }
+
     protected function bootProvider(object $provider): void
     {
+        $class = $provider::class;
+
+        if (isset($this->bootedProviders[$class])) {
+            return;
+        }
+
+        // Mark as booted *before* calling boot(): a provider whose boot()
+        // triggers register() of another provider (which re-enters this loop)
+        // would otherwise be booted twice.
+        $this->bootedProviders[$class] = true;
+
         if (method_exists($provider, 'boot')) {
             $this->call([$provider, 'boot']);
         }
-        $this->bootedProviders[] = $provider;
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -202,49 +251,85 @@ class Application extends Container
     //  Paths
     // ─────────────────────────────────────────────────────────────────
 
+    /**
+     * Join path segments with the platform separator.
+     *
+     * The sub-path helpers used to hard-code forward slashes ('src/app')
+     * while basePath() joined with DIRECTORY_SEPARATOR, producing mixed
+     * separators on Windows: "C:\app\src/app". PHP's file functions tolerate
+     * that, but string comparisons, cache keys derived from paths, and
+     * anything shown in an error message do not.
+     */
+    protected function joinPath(string ...$segments): string
+    {
+        $parts = [];
+
+        foreach ($segments as $segment) {
+            $segment = trim(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $segment), DIRECTORY_SEPARATOR);
+
+            if ($segment !== '') {
+                $parts[] = $segment;
+            }
+        }
+
+        return implode(DIRECTORY_SEPARATOR, $parts);
+    }
+
     public function basePath(string $path = ''): string
     {
-        return $this->basePath . ($path ? DIRECTORY_SEPARATOR . ltrim($path, DIRECTORY_SEPARATOR) : '');
+        return $path === ''
+            ? $this->basePath
+            : $this->basePath . DIRECTORY_SEPARATOR . $this->joinPath($path);
     }
 
     public function appPath(string $path = ''): string
     {
-        return $this->basePath('src/app' . ($path ? '/' . ltrim($path, '/') : ''));
+        return $this->basePath($this->joinPath('src', 'app', $path));
     }
 
     public function configPath(string $path = ''): string
     {
-        return $this->basePath('src/config' . ($path ? '/' . ltrim($path, '/') : ''));
+        return $this->basePath($this->joinPath('src', 'config', $path));
     }
 
     public function storagePath(string $path = ''): string
     {
-        return $this->basePath('src/storage' . ($path ? '/' . ltrim($path, '/') : ''));
+        return $this->basePath($this->joinPath('src', 'storage', $path));
     }
 
     public function resourcePath(string $path = ''): string
     {
-        return $this->basePath('src/resources' . ($path ? '/' . ltrim($path, '/') : ''));
+        return $this->basePath($this->joinPath('src', 'resources', $path));
     }
 
     public function publicPath(string $path = ''): string
     {
-        return $this->basePath('src/public' . ($path ? '/' . ltrim($path, '/') : ''));
+        return $this->basePath($this->joinPath('src', 'public', $path));
     }
 
     public function databasePath(string $path = ''): string
     {
-        return $this->basePath('database' . ($path ? '/' . ltrim($path, '/') : ''));
+        return $this->basePath($this->joinPath('database', $path));
     }
 
     public function viewPath(string $path = ''): string
     {
-        return $this->resourcePath('views' . ($path ? '/' . ltrim($path, '/') : ''));
+        return $this->resourcePath($this->joinPath('views', $path));
     }
 
     public function modulesPath(string $path = ''): string
     {
-        return $this->appPath('Modules' . ($path ? '/' . ltrim($path, '/') : ''));
+        return $this->appPath($this->joinPath('Modules', $path));
+    }
+
+    public function langPath(string $path = ''): string
+    {
+        return $this->basePath($this->joinPath('src', 'lang', $path));
+    }
+
+    public function routesPath(string $path = ''): string
+    {
+        return $this->basePath($this->joinPath('src', 'routes', $path));
     }
 
     protected function bindPathsInContainer(): void
@@ -273,29 +358,161 @@ class Application extends Container
 
         $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
+        if ($lines === false) {
+            return;
+        }
+
         foreach ($lines as $line) {
-            if (str_starts_with(trim($line), '#')) {
+            $line = trim($line);
+
+            if ($line === '' || str_starts_with($line, '#')) {
                 continue;
             }
 
-            if (str_contains($line, '=')) {
-                [$key, $value] = explode('=', $line, 2);
-                $key   = trim($key);
-                $value = trim($value, " \t\n\r\0\x0B\"'");
+            // Allow the "export KEY=value" form used by shell-sourced .env files.
+            if (str_starts_with($line, 'export ')) {
+                $line = ltrim(substr($line, 7));
+            }
 
-                static::$env[$key] = $value;
-                $_ENV[$key]        = $value;
+            if (! str_contains($line, '=')) {
+                continue;
+            }
 
-                if (! getenv($key)) {
-                    putenv("$key=$value");
-                }
+            [$key, $value] = explode('=', $line, 2);
+
+            $key = trim($key);
+            if ($key === '' || ! preg_match('/^[A-Za-z_][A-Za-z0-9_.]*$/', $key)) {
+                continue;
+            }
+
+            static::$env[$key] = $value = static::parseEnvValue($value);
+            $_ENV[$key]        = $value;
+
+            // getenv() returns "0"/"" as legitimate values, so a truthiness
+            // check here would clobber a real environment variable of "0".
+            if (getenv($key) === false) {
+                putenv("$key=$value");
             }
         }
     }
 
+    /**
+     * Parse the right-hand side of a .env assignment.
+     *
+     * Handles quoted values (which may legitimately contain '#' or spaces),
+     * strips trailing inline comments from unquoted values, and expands the
+     * standard escape sequences inside double quotes. The previous version
+     * ran trim($value, " \"'") over the raw string, which mangled values such
+     * as   APP_NAME="My App"   # comment   and any password ending in a quote.
+     */
+    protected static function parseEnvValue(string $value): string
+    {
+        $value = ltrim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        $quote = $value[0];
+
+        if ($quote === '"' || $quote === "'") {
+            // Find the closing quote, skipping escaped ones in double quotes.
+            $len = strlen($value);
+            for ($i = 1; $i < $len; $i++) {
+                if ($quote === '"' && $value[$i] === '\\') {
+                    $i++;
+                    continue;
+                }
+                if ($value[$i] === $quote) {
+                    $inner = substr($value, 1, $i - 1);
+                    return $quote === '"' ? stripcslashes($inner) : $inner;
+                }
+            }
+
+            // Unterminated quote — fall back to the raw remainder.
+            return substr($value, 1);
+        }
+
+        // Unquoted: an unescaped '#' starts an inline comment.
+        if (($hash = strpos($value, ' #')) !== false) {
+            $value = substr($value, 0, $hash);
+        }
+
+        return rtrim($value);
+    }
+
+    /**
+     * Read an environment variable.
+     *
+     * The previous implementation mixed ?? and ?: in one expression:
+     *   static::$env[$key] ?? getenv($key) ?: $_ENV[$key] ?? $default
+     * which PHP groups as (a ?? b) ?: (c ?? d). Any *falsy* value — "0",
+     * "", "false" — therefore fell through to the default, so APP_DEBUG=0
+     * behaved exactly like an unset APP_DEBUG. Each source is now checked
+     * for presence rather than truthiness, and the common literals are
+     * cast to real PHP types the way every mainstream framework does.
+     */
     public static function env(string $key, mixed $default = null): mixed
     {
-        return static::$env[$key] ?? getenv($key) ?: $_ENV[$key] ?? $default;
+        if (array_key_exists($key, static::$env)) {
+            return static::castEnv(static::$env[$key]);
+        }
+
+        $value = getenv($key);
+        if ($value !== false) {
+            return static::castEnv($value);
+        }
+
+        if (array_key_exists($key, $_ENV)) {
+            return static::castEnv($_ENV[$key]);
+        }
+
+        if (array_key_exists($key, $_SERVER)) {
+            return static::castEnv($_SERVER[$key]);
+        }
+
+        return $default;
+    }
+
+    /**
+     * Read an environment variable as a strict boolean.
+     *
+     * Accepts every spelling people actually put in a .env file
+     * ("true"/"1"/"on"/"yes" and their negatives) instead of the
+     * === 'true' string comparisons that used to be scattered around
+     * the framework and silently treated FEATURE=1 as disabled.
+     */
+    public static function envBool(string $key, bool $default = false): bool
+    {
+        $value = static::env($key);
+
+        if ($value === null || $value === '') {
+            return $default;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $default;
+    }
+
+    /**
+     * Turn the conventional .env literals into PHP values.
+     */
+    protected static function castEnv(mixed $value): mixed
+    {
+        if (! is_string($value)) {
+            return $value;
+        }
+
+        return match (strtolower($value)) {
+            'true', '(true)'   => true,
+            'false', '(false)' => false,
+            'null', '(null)'   => null,
+            'empty', '(empty)' => '',
+            default            => $value,
+        };
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -303,52 +520,24 @@ class Application extends Container
     // ─────────────────────────────────────────────────────────────────
 
     /**
-     * Resolve dependencies with FormRequest support.
+     * Resolve a class-typed parameter, adding FormRequest auto-injection
+     * (capture + validate) on top of the container's normal resolution.
+     *
+     * This used to be a full copy of Container::resolveDependencies(), which
+     * meant every hardening fix had to be applied twice and the two copies
+     * had already drifted apart. Only the FormRequest special case is
+     * overridden now; everything else is inherited.
      */
-    protected function resolveDependencies(array $parameters, array $overrides = []): array
+    protected function resolveClassDependency(\ReflectionParameter $param, string $className): mixed
     {
-        $dependencies = [];
+        if (is_subclass_of($className, \Libxa\Http\FormRequest::class)) {
+            $formRequest = $className::capture();
+            $formRequest->validateResolved();
 
-        foreach ($parameters as $param) {
-            $name = $param->getName();
-
-            if (isset($overrides[$name])) {
-                $dependencies[] = $overrides[$name];
-                continue;
-            }
-
-            $type = $param->getType();
-
-            if ($type instanceof \ReflectionNamedType && ! $type->isBuiltin()) {
-                $className = $type->getName();
-
-                // ⚡ FormRequest Auto-Injection & Validation
-                if (is_subclass_of($className, \Libxa\Http\FormRequest::class)) {
-                    $formRequest = $className::capture();
-                    $formRequest->validateResolved();
-                    $dependencies[] = $formRequest;
-                    continue;
-                }
-
-                try {
-                    $dependencies[] = $this->make($className);
-                } catch (\Throwable $e) {
-                    if ($param->isDefaultValueAvailable()) {
-                        $dependencies[] = $param->getDefaultValue();
-                    } elseif ($param->allowsNull()) {
-                        $dependencies[] = null;
-                    } else {
-                        throw $e;
-                    }
-                }
-            } elseif ($param->isDefaultValueAvailable()) {
-                $dependencies[] = $param->getDefaultValue();
-            } else {
-                $dependencies[] = null;
-            }
+            return $formRequest;
         }
 
-        return $dependencies;
+        return parent::resolveClassDependency($param, $className);
     }
 
     // ─────────────────────────────────────────────────────────────────

@@ -16,9 +16,18 @@ class ShareErrorsMiddleware
 {
     public function handle(Request $request, \Closure $next): Response
     {
-        // Age flash data so @error directives work in views
         if (app()->has('session')) {
-            app('session')->ageFlashData();
+            $session = app('session');
+
+            // ageFlashData() is idempotent per request now; calling it here as
+            // well as in SessionMiddleware used to blow away the flash bag
+            // before any view could read it.
+            $session->ageFlashData();
+
+            // Make the error bag available to views without every controller
+            // having to pass it, and without the @error directive needing to
+            // reach into $_SESSION itself.
+            $request->setAttribute('errors', errors());
         }
 
         return $next($request);

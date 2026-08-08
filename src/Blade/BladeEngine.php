@@ -50,6 +50,33 @@ class BladeEngine
     /** Set to false to force a recompile on every render (useful in local dev). */
     protected bool $cacheEnabled = true;
 
+    /**
+     * When true (production/"frozen" mode), the engine trusts an existing
+     * compiled cache file completely and skips the filemtime() staleness
+     * check on every render. This removes 2 stat() syscalls per view (per
+     * @include/@component/render() call) which matters a lot on templates
+     * that pull in many partials. Enable via freeze()/BladeServiceProvider
+     * once `view:cache` (or a normal warm-up request) has produced fresh
+     * compiled files; remember to view:clear + re-warm after deploys.
+     */
+    protected bool $checkTimestamps = true;
+
+    /**
+     * In-process memoization so that rendering the same view/partial many
+     * times in a single request (e.g. a component inside a @foreach loop)
+     * only ever resolves its path and validates its cache once, instead of
+     * repeating the directory-walk + is_file() probing and the mtime
+     * comparison on every single iteration.
+     *
+     * @var array<string, string> view name => resolved absolute file path
+     */
+    protected array $resolvedPathCache = [];
+
+    /**
+     * @var array<string, string> resolved file path => validated compiled cache path
+     */
+    protected array $compiledPathCache = [];
+
     /** Depth guard against runaway/circular @include chains. */
     protected int $renderDepth = 0;
     protected int $maxRenderDepth = 64;
@@ -80,6 +107,33 @@ class BladeEngine
     public function setCacheEnabled(bool $enabled): void
     {
         $this->cacheEnabled = $enabled;
+
+        // Toggling the cache back on/off invalidates anything we'd already
+        // decided was "fresh" this process, since dev-mode edits may have
+        // happened while it was off.
+        $this->compiledPathCache = [];
+    }
+
+    /**
+     * Enable "frozen" production mode: once a compiled cache file exists
+     * for a view, trust it for the lifetime of this process and never
+     * stat() the source file again. This is the single biggest win for
+     * view render speed under real traffic, especially combined with
+     * `php libxa view:cache` to pre-warm every view before the first
+     * request ever hits it.
+     *
+     * Do NOT enable this in local development — template edits won't be
+     * picked up until the cache is cleared (`view:clear`).
+     */
+    public function freeze(): void
+    {
+        $this->checkTimestamps = false;
+    }
+
+    public function unfreeze(): void
+    {
+        $this->checkTimestamps = true;
+        $this->compiledPathCache = [];
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -133,11 +187,30 @@ class BladeEngine
      */
     protected function getOrCompile(string $path, string $viewNameForErrors): string
     {
-        $cachePath = $this->getCachedPath($path);
-
         if (! $this->cacheEnabled) {
+            $cachePath = $this->getCachedPath($path);
             $this->compileFileToCache($path, $cachePath, $viewNameForErrors);
             return $cachePath;
+        }
+
+        // Fast path: this exact view was already resolved+validated earlier
+        // in this process (e.g. a partial/component re-used across a loop,
+        // or a persistent Reactive worker that's already served it once
+        // this "epoch"). Skip both stat() calls entirely.
+        if (isset($this->compiledPathCache[$path])) {
+            return $this->compiledPathCache[$path];
+        }
+
+        $cachePath = $this->getCachedPath($path);
+
+        // Frozen/production mode: once the compiled file exists, trust it
+        // for the rest of the process lifetime — no filemtime() calls at
+        // all. Views are precompiled ahead of time via `view:cache`.
+        if (! $this->checkTimestamps) {
+            if (! is_file($cachePath)) {
+                $this->compileFileToCache($path, $cachePath, $viewNameForErrors);
+            }
+            return $this->compiledPathCache[$path] = $cachePath;
         }
 
         $sourceMTime = @filemtime($path);
@@ -151,7 +224,7 @@ class BladeEngine
             $this->compileFileToCache($path, $cachePath, $viewNameForErrors);
         }
 
-        return $cachePath;
+        return $this->compiledPathCache[$path] = $cachePath;
     }
 
     protected function compileFileToCache(string $path, string $cachePath, string $viewNameForErrors): void
@@ -190,6 +263,22 @@ class BladeEngine
             @unlink($tmpPath);
             throw new \RuntimeException("Unable to finalize Blade cache file at [{$cachePath}].");
         }
+
+        // Push the freshly written file straight into OPcache's bytecode
+        // cache. Without this, the file sits on disk until the *next*
+        // include() triggers PHP to parse+compile it — this just does
+        // that work once, up front, instead of on the request that's
+        // already waiting on it.
+        if (function_exists('opcache_compile_file') && function_exists('opcache_is_script_cached')) {
+            try {
+                if (! @opcache_is_script_cached($cachePath)) {
+                    @opcache_compile_file($cachePath);
+                }
+            } catch (\Throwable) {
+                // OPcache misconfiguration (e.g. opcache.restrict_api)
+                // should never break a render — it's a pure optimization.
+            }
+        }
     }
 
     /**
@@ -206,6 +295,19 @@ class BladeEngine
             // from a previous, unrelated render — important on
             // persistent-process runtimes where BladeStack is static.
             BladeStack::flush();
+
+            // Drop the per-render memoization caches too, unless we're
+            // frozen (production): on a persistent-process runtime (Swoole/
+            // Workerman workers) a previous request may have resolved a
+            // view that has since changed on disk, so a *new* top-level
+            // request must re-validate at least once. Within the render
+            // tree of a single request (partials/components reused in a
+            // loop) the cache stays warm the whole time, which is where
+            // the actual savings come from.
+            if ($this->checkTimestamps) {
+                $this->resolvedPathCache = [];
+                $this->compiledPathCache = [];
+            }
         }
 
         $this->renderDepth++;
@@ -269,6 +371,15 @@ class BladeEngine
     // ─────────────────────────────────────────────────────────────────
 
     public function resolvePath(string $view): string
+    {
+        if (isset($this->resolvedPathCache[$view])) {
+            return $this->resolvedPathCache[$view];
+        }
+
+        return $this->resolvedPathCache[$view] = $this->resolvePathUncached($view);
+    }
+
+    protected function resolvePathUncached(string $view): string
     {
         if (str_contains($view, '::')) {
             [$namespace, $name] = explode('::', $view, 2);
@@ -361,6 +472,47 @@ class BladeEngine
     }
 
     /**
+     * Compile every *.blade.php file reachable from the registered view
+     * paths and namespaces, ahead of time. Used by `php libxa view:cache`
+     * so the first real request never pays a compile cost, and so the app
+     * can safely run in frozen (checkTimestamps=false) mode afterwards.
+     *
+     * @return string[] absolute source paths that were compiled
+     */
+    public function precompileAll(): array
+    {
+        $compiled = [];
+
+        $allBasePaths = $this->viewPaths;
+        foreach ($this->namespaces as $paths) {
+            $allBasePaths = array_merge($allBasePaths, $paths);
+        }
+
+        foreach (array_unique($allBasePaths) as $basePath) {
+            if (! is_dir($basePath)) {
+                continue;
+            }
+
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($basePath, \FilesystemIterator::SKIP_DOTS)
+            );
+
+            foreach ($iterator as $file) {
+                if (! $file->isFile() || ! str_ends_with($file->getFilename(), '.blade.php')) {
+                    continue;
+                }
+
+                $path      = $file->getPathname();
+                $cachePath = $this->getCachedPath($path);
+                $this->compileFileToCache($path, $cachePath, $path);
+                $compiled[] = $path;
+            }
+        }
+
+        return $compiled;
+    }
+
+    /**
      * Clear all compiled view cache.
      */
     public function clearCache(): int
@@ -374,24 +526,4 @@ class BladeEngine
         }
         return $count;
     }
-}
-
-/**
- * Shared data store — works like View::share() in Laravel.
- */
-class SharedData
-{
-    protected static array $data = [];
-
-    public static function set(string $key, mixed $value): void
-    {
-        static::$data[$key] = $value;
-    }
-
-    public static function get(?string $key = null): mixed
-    {
-        return $key !== null ? (static::$data[$key] ?? null) : static::$data;
-    }
-
-    public static function all(): array { return static::$data; }
 }

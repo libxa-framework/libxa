@@ -133,3 +133,113 @@ reading the code):
   and executed end-to-end against the real `Compiler`/`BladeEngine` classes.
 - New regression tests added at `tests/Feature/BladeCompilerTest.php` so these stay fixed.
 
+
+---
+
+# Stability Audit — August 2026
+
+A second full pass over the framework core and the `LibxaStack` starter kit,
+focused on crashes, silent wrong-behaviour, and security. Everything below was
+reproduced against real code (a real container, a real SQLite database, real
+requests through the HTTP kernel) before being fixed, and each item is locked in
+by a regression test. Suite: **197 framework tests / 25 starter-kit tests**.
+
+## 🔴 Fatal / process-killing
+
+| Area | Issue | Fix |
+|---|---|---|
+| `Container/ContextGraph.php` | Declared a **second copy** of `ContextualBindingBuilder`, which already has its own file. The moment both files loaded — i.e. as soon as an app used `->when()` — PHP died with `Cannot redeclare class`. | Removed the duplicate; merged its `whenContext()` into the real class. |
+| PSR-4 across `src/` | **12 files declared classes the autoloader could never find** (`Attributes/Route.php` held 6 attribute classes, `Support/Str.php` hid `StringableProxy`, `Atlas/QueryBuilder.php` hid `RawExpression`, `Blade/BladeEngine.php` hid `SharedData`, …). Referencing one gave `Class not found`; `#[Prefix]`/`#[Middleware]` attribute routing was entirely unusable. | Every class extracted into its own PSR-4 file. `tests/Feature/AutoloadingTest.php` now fails the build if this regresses. |
+| `Container/Container.php` | Two classes depending on each other recursed until PHP exhausted the stack — the process died with no usable error. | Explicit circular-dependency detection naming the full resolution chain. |
+| `Container/Container.php` | If a dependency threw, `buildStack` was never popped, corrupting contextual resolution for the rest of the process. | `try`/`finally` unwind. |
+| `Http/Middleware/ThrottleMiddleware.php` | The pipeline parses `throttle:60` into the **string** `"60"`; with `strict_types=1` on both sides that is an uncatchable `TypeError`. The built-in `api` middleware group crashed on its first request. | Parameters accept `int\|string` and are cast. |
+| `Router/Pipeline.php` | `Route::middleware('web')` asked the container to build a class literally named `web` → `Target class [web] does not exist`. Middleware **groups were never expanded**. | Groups are expanded (and de-duplicated) before the pipeline runs. |
+| `Security/Encrypter.php` | A payload with array fields (`?p[iv][]=x`) reached `base64_decode()`/`hash_equals()` and raised a `TypeError` — an unauthenticated 500 on any endpoint decrypting user input. | Every payload field is type-checked before use. |
+| `Http/Middleware/CsrfMiddleware.php` | `_token[]=x` reached `hash_equals()` with an array — same unauthenticated 500, on **every form endpoint**. | Non-string tokens are rejected as a clean 419. |
+| `Foundation/HttpKernel.php` | If the exception handler itself threw (e.g. `back()` with no session), the process died with a blank 500 and the original exception was lost. | Nested guard that reports both exceptions. |
+| `Async/Parallel.php` | A fiber left in a non-resumable state made the scheduler loop spin forever until the PHP time limit killed the request. | Explicit state handling; per-task exception capture via `ParallelException`. |
+
+## 🟠 Silent wrong behaviour
+
+| Area | Issue | Fix |
+|---|---|---|
+| `Http/Request.php` | `capture()` stored headers as `CONTENT-TYPE` while `header()` looked up `CONTENT_TYPE`. **Every multi-word header lookup silently returned the default**, disabling `isAjax()`, `isJson()` and the `X-CSRF-TOKEN` branch of CSRF. | One canonical normalisation (`normalizeHeaderName()`) used by both. |
+| `Foundation/Application.php` | `env()` was `a ?? b ?: c ?? d`, which PHP groups as `(a ?? b) ?: (c ?? d)` — so **any falsy value fell through to the default** and `APP_DEBUG=0` behaved like an unset `APP_DEBUG`. | Presence-based lookup per source, plus `envBool()` for the `=== 'true'` comparisons scattered around the framework. |
+| `Atlas/QueryBuilder.php` | The soft-delete filter was emitted while the "first condition" flag was still set, so the first user `where()` got no `AND` — producing `WHERE deleted_at IS NULL "id" = ?`. **Any soft-deleting model with a where clause was unqueryable.** | Correct boolean joining. |
+| `Atlas/QueryBuilder.php` | `where('col', null)` emitted `col = ?` bound to `NULL`, which is never true in SQL, so the row could never be found; `where('c','>',null)` silently became `c = '>'`. | Argument count decides; null becomes `IS NULL` / `IS NOT NULL`. |
+| `Atlas/Schema/Schema.php` | The `SchemaBuilder` was memoised in a static nothing invalidated, capturing the **first PDO it ever saw**. After a reconnect/tenant switch, every `Schema::` call wrote DDL to the *previous* database. | Rebuilt whenever the underlying handle changes; `Schema::reset()` added. |
+| `Atlas/Migrations/Migrator.php` | A migration whose class name didn't match its filename was **skipped in silence** — exit code 0, no warning. The starter kit shipped exactly such a file, so `personal_access_tokens.refresh_token` never existed. | The declared class is read from the file; a file with no usable migration class is a hard error. |
+| `Session/Session.php` | `ageFlashData()` ran from three call sites per request. The second run moved the now-empty bucket over the readable one, **deleting flash messages before any view saw them** — the reason `back()->with('error', …)` did nothing. | Idempotent per request; duplicate call sites removed. |
+| `Validation/Validator.php` | `! filter_var($v, FILTER_VALIDATE_INT)` — `filter_var('0')` is `int(0)`, which is falsy, so **`0` failed the `integer` rule**. | Compare against `false`. |
+| `Validation/Validator.php` | `min`/`max` measured string *length* even for numeric fields, so `integer\|min:18` compared `mb_strlen('20') === 2` against 18 and always failed. | Numeric-aware sizing. |
+| `Validation/Validator.php` | `unique`/`exists` swallowed every `Throwable`, so a DB outage or a typo'd table made `unique` silently **pass** — the one case where it must not. | Only a genuinely absent connection is tolerated; identifiers validated and quoted per driver. |
+| `Validation/Validator.php` | `validated()` returned `field => null` for absent optional fields, so a mass update wrote nulls over real column values. | Only submitted fields are returned. |
+| `Router/Router.php` | `prefix()`/`middleware()`/`name()` pushed onto the group stack; `group()` popped one frame — so `Route::prefix('api')->group(...)` **permanently prefixed every route registered afterwards**. | Staged separately and consumed by `group()`, which pops in a `finally`. |
+| `Router/Route.php` | `/users/{id?}` compiled to `/users/(?P<id>[^/]+)?` — the slash was mandatory, so **optional parameters could never match** the bare path. A literal `.` in a URI matched any character. | Slash moved inside the optional group; literals `preg_quote`'d; `where()` constraints added. |
+| `Router/Route.php` | Matched parameters lived only on the shared Route object, so under a persistent worker request N+1 could read request N's parameters. | Parameters are bound to the Request. |
+| `Router/Router.php` | A wrong HTTP verb returned 404, indistinguishable from a typo'd URL. | 405 + `Allow` header. |
+| `Router/Router.php` | `resource()` registered only `PUT` for updates, so every `PATCH` 404'd; `/{id}` was registered before `/create`. | Both verbs; correct ordering. |
+| `Foundation/Application.php` | A provider reachable from several discovery paths was registered once per path, duplicating its routes, listeners and commands. | Registration and booting are idempotent per class. |
+| `Foundation/Application.php` | The `.env` parser ran `trim($v, " \"'")` over the raw value: quoted values with spaces/`#` were mangled and inline comments were never stripped. | Proper quote/comment/`export` handling. |
+| `Foundation/Application.php` | Path helpers hard-coded `/` while `basePath()` used `DIRECTORY_SEPARATOR`, producing `C:\app\src/app`. | Consistent joining. |
+| `Http/Response.php` | Every cookie was written to `$headers['Set-Cookie']`, so each call overwrote the last — **a response could only ever carry one cookie**. | Cookies kept in their own list. |
+| `Support/helpers.php` | `app()` returned `null` when the app wasn't bootstrapped, so failures surfaced far away as `… on null`. | Throws where the mistake actually is. |
+| `LibxaStack/src/bootstrap/*.php` | Four bootstrapped files began with a **UTF-8 BOM**, emitting output before `header()` on every request. | Stripped; a test now guards it. |
+
+## 🛡️ Security
+
+| Area | Issue | Fix |
+|---|---|---|
+| `Http/Request.php` | `X-Forwarded-For` was trusted unconditionally, so anyone could reset their own rate-limit bucket or forge audit IPs with one header. | Only honoured from a configured `TRUSTED_PROXIES`. |
+| `Http/Request.php` | `_method` was read from the query string, so `<img src="/x?_method=DELETE">` could reach a destructive route on a plain navigation. | POST bodies only. |
+| `Http/Response.php` / `back()` | The client-supplied `Referer` was echoed straight into `Location` — **every "redirect back" was an open redirect**. | Reduced to a same-origin target (`safeReferer()`), including protocol-relative `//evil.com`. |
+| `Atlas/QueryBuilder.php` | `orderBy()` interpolated both column and direction verbatim — a direct SQL injection in the most common way it gets called (`orderBy($request->input('sort'), …)`). Same for `join()` and the aggregate helpers. | Identifiers quoted, direction/type/operator whitelisted; `orderByRaw()` for deliberate raw SQL. |
+| `Security/Encrypter.php` | Key length was never validated; openssl silently NUL-pads a short key, so a truncated `APP_KEY` produced quietly weakened ciphertext that still round-tripped in testing. | Length validated per cipher; `base64:` keys decoded; clear error pointing at `key:generate`. |
+| `Security/Encrypter.php` | `decrypt()` called `unserialize()` with no restrictions — object injection if a key ever leaked. | `allowed_classes => false`. |
+| `Session/Session.php` | `invalidate()` called `session_destroy()` then checked for `PHP_SESSION_NONE`, which never matches in the same request — **the session ID was never rotated on logout** (session fixation). | `session_regenerate_id(true)`. |
+| `Session/Session.php` | `config/session.php` shipped `http_only`, `same_site`, `secure` and `lifetime` settings the class **never read**; every app ran on php.ini defaults with no `SameSite`. | Config is applied to the session cookie. |
+| `Foundation/HttpKernel.php` | The debug error page interpolated the exception message, class and file into HTML unescaped. | All escaped. |
+| `Foundation/HttpKernel.php` | Unexpected exceptions were swallowed silently in production. | Always logged, never leaked to the client. |
+| `Http/Middleware/CsrfMiddleware.php` | No way to exempt a URI, so webhook receivers forced apps to delete the middleware wholesale. | `session.csrf_except` with wildcard support; `X-XSRF-TOKEN` accepted. |
+
+## 🧪 Testing
+
+- `tests/TestCase.php` — boots a **real** `Application` against a throwaway skeleton.
+  The previous tests mocked `Application` and tried to stub the *static* `env()`,
+  which cannot work; every one of them errored.
+- New suites: `Unit/{Container,Route,Request,Response,Session,Validator,Encrypter,QueryBuilder,Schema}Test`
+  and `Feature/{Application,Router,HttpKernel,CsrfMiddleware,Autoloading}Test`.
+- `QueryBuilderTest`/`SchemaTest` run against real in-memory SQLite, so SQL that does
+  not parse fails here rather than in production.
+- The starter kit gains `phpunit.xml` (its CI ran `pest` with **no configuration at all**,
+  so it could never have run a test), a `Tests\TestCase` that migrates a per-test
+  database and drives the real kernel, and end-to-end coverage of
+  register → login → protected page → logout.
+
+## 🔗 Framework ↔ starter-kit wiring
+
+`LibxaStack` shipped a **mirrored copy** of the framework in
+`vendor/libxa/framework`. Nothing kept it in step with the real source, and the
+two had drifted in both directions — the vendored copy carried console commands
+the source lacked, while the source carried bug fixes and whole directories the
+copy lacked. The practical effect was that fixing a bug in the framework had no
+effect on the application at all.
+
+The path repository now uses `symlink: true`, so `vendor/libxa/framework` *is*
+`../libxaframe` (a junction on Windows). Framework edits — including brand-new
+classes, which the PSR-4 autoloader picks up with no `dump-autoload` — take
+effect on the very next request, and the two copies can no longer disagree.
+
+Two deliberate details in the starter kit's `composer.json`:
+
+- the repository `url` is the glob `../libxaframe*`. A literal path that does
+  not exist makes Composer **abort**, which would break `composer create-project`
+  for anyone without the sibling checkout; a glob matching nothing is ignored,
+  so resolution falls through to Packagist.
+- the constraint is `dev-main || ^0.8.0`: the local checkout wins when present,
+  and a published release is still installable when it is not.
+
+`LibxaStack/tests/Feature/FrameworkLinkTest.php` fails the build if the link is
+ever replaced by a copy, if the two trees diverge, or if either of the two
+`composer.json` details above is undone. It skips when there is no sibling
+checkout, which is the correct state for CI and production installs.

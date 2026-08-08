@@ -120,19 +120,24 @@ class Router
         $except = $options['except'] ?? [];
         $prefix = str_replace('.', '/', $name);
 
+        // Order matters: /{resource}/create must be registered before
+        // /{resource}/{id}, otherwise "create" is swallowed as an {id}.
         $map = [
-            'index'   => ['GET',    "/$prefix",              'index'],
-            'create'  => ['GET',    "/$prefix/create",       'create'],
-            'store'   => ['POST',   "/$prefix",              'store'],
-            'show'    => ['GET',    "/$prefix/{id}",         'show'],
-            'edit'    => ['GET',    "/$prefix/{id}/edit",    'edit'],
-            'update'  => ['PUT',    "/$prefix/{id}",         'update'],
-            'destroy' => ['DELETE', "/$prefix/{id}",         'destroy'],
+            'index'   => [['GET'],          "/$prefix",           'index'],
+            'create'  => [['GET'],          "/$prefix/create",    'create'],
+            'store'   => [['POST'],         "/$prefix",           'store'],
+            'edit'    => [['GET'],          "/$prefix/{id}/edit", 'edit'],
+            'show'    => [['GET'],          "/$prefix/{id}",      'show'],
+            // Browsers can only spoof PUT via POST+_method, and API clients
+            // routinely send PATCH — accepting only PUT made half the
+            // conventional update requests 404.
+            'update'  => [['PUT', 'PATCH'], "/$prefix/{id}",      'update'],
+            'destroy' => [['DELETE'],       "/$prefix/{id}",      'destroy'],
         ];
 
-        foreach ($map as $action => [$method, $uri, $method_name]) {
-            if (in_array($action, $only) && ! in_array($action, $except)) {
-                $this->addRoute([$method], $uri, [$controller, $method_name])
+        foreach ($map as $action => [$methods, $uri, $method_name]) {
+            if (in_array($action, $only, true) && ! in_array($action, $except, true)) {
+                $this->addRoute($methods, $uri, [$controller, $method_name])
                      ->name("$name.$action");
             }
         }
@@ -142,33 +147,58 @@ class Router
     //  Route Groups
     // ─────────────────────────────────────────────────────────────────
 
+    /**
+     * Attributes accumulated by the fluent builders (prefix()/middleware()/
+     * name()) that are waiting for the group() call that consumes them.
+     */
+    protected array $pendingGroup = [];
+
     public function group(array $attributes, \Closure $callback): void
     {
+        // Merge in anything staged by ->prefix()/->middleware()/->name().
+        if ($this->pendingGroup !== []) {
+            $attributes = array_merge_recursive($this->pendingGroup, $attributes);
+            $this->pendingGroup = [];
+        }
+
         $this->groupStack[] = $attributes;
-        $callback($this);
-        array_pop($this->groupStack);
+
+        // finally: a route file that throws mid-group used to leave its
+        // prefix on the stack forever, silently prefixing every route
+        // registered afterwards.
+        try {
+            $callback($this);
+        } finally {
+            array_pop($this->groupStack);
+        }
     }
 
+    /**
+     * Stage a prefix for the next group().
+     *
+     * These builders used to push straight onto $groupStack, which group()
+     * never popped — so `Route::prefix('api')->group(...)` permanently
+     * prefixed every subsequent route in the application with /api.
+     */
     public function prefix(string $prefix): static
     {
-        $this->groupStack[] = ['prefix' => $prefix];
+        $this->pendingGroup['prefix'] = $prefix;
         return $this;
     }
 
     public function middleware(string|array $middleware): static
     {
-        $last = array_pop($this->groupStack) ?? [];
-        $existing = (array) ($last['middleware'] ?? []);
-        $last['middleware'] = array_merge($existing, (array) $middleware);
-        $this->groupStack[] = $last;
+        $this->pendingGroup['middleware'] = array_merge(
+            (array) ($this->pendingGroup['middleware'] ?? []),
+            (array) $middleware
+        );
+
         return $this;
     }
 
     public function name(string $name): static
     {
-        $last          = array_pop($this->groupStack) ?? [];
-        $last['name']  = $name;
-        $this->groupStack[] = $last;
+        $this->pendingGroup['name'] = $name;
         return $this;
     }
 
@@ -187,9 +217,28 @@ class Router
             $route->middleware($middleware);
         }
 
+        $route->setNamePrefix($this->getGroupNamePrefix());
+
         $this->routes->add($route);
 
         return $route;
+    }
+
+    /**
+     * Concatenated name prefix contributed by the enclosing group stack,
+     * e.g. Route::name('admin.')->group(...) => "admin.".
+     */
+    protected function getGroupNamePrefix(): string
+    {
+        $prefix = '';
+
+        foreach ($this->groupStack as $group) {
+            if (isset($group['name']) && is_string($group['name'])) {
+                $prefix .= $group['name'];
+            }
+        }
+
+        return $prefix;
     }
 
     protected function applyGroupPrefix(string $uri): string
@@ -234,43 +283,51 @@ class Router
             return;
         }
 
-        $reflector    = new \ReflectionClass($class);
-        $classPrefix  = '';
+        $reflector       = new \ReflectionClass($class);
+        $classPrefix     = '';
         $classMiddleware = [];
 
-        // Class-level attributes
-        foreach ($reflector->getAttributes() as $attr) {
-            $instance = $attr->newInstance();
+        // Class-level attributes. Filtering by class *before* calling
+        // newInstance() matters: the old code instantiated every attribute it
+        // found, so one unrelated attribute (a PHPUnit marker, #[Deprecated],
+        // an attribute from another package) aborted the whole route scan
+        // with "Attribute class ... not found".
+        foreach ($reflector->getAttributes(\Libxa\Router\Attributes\Prefix::class) as $attr) {
+            $classPrefix = '/' . ltrim($attr->newInstance()->prefix, '/');
+        }
 
-            if ($instance instanceof \Libxa\Router\Attributes\Prefix) {
-                $classPrefix = '/' . ltrim($instance->prefix, '/');
-            }
-            if ($instance instanceof \Libxa\Router\Attributes\Middleware) {
-                $classMiddleware = array_merge($classMiddleware, (array) $instance->middleware);
+        foreach ($reflector->getAttributes(\Libxa\Router\Attributes\ApiController::class) as $attr) {
+            if ($classPrefix === '') {
+                $classPrefix = '/' . ltrim($attr->newInstance()->prefix, '/');
             }
         }
 
+        foreach ($reflector->getAttributes(\Libxa\Router\Attributes\Middleware::class) as $attr) {
+            $classMiddleware = array_merge($classMiddleware, (array) $attr->newInstance()->middleware);
+        }
+
         foreach ($reflector->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
-            foreach ($method->getAttributes() as $attr) {
+            if ($method->isStatic() || $method->getDeclaringClass()->getName() !== $class) {
+                continue;
+            }
+
+            // Method-level middleware applies to every route on the method.
+            $methodMiddleware = [];
+            foreach ($method->getAttributes(\Libxa\Router\Attributes\Middleware::class) as $mAttr) {
+                $methodMiddleware = array_merge($methodMiddleware, (array) $mAttr->newInstance()->middleware);
+            }
+
+            foreach ($method->getAttributes(\Libxa\Router\Attributes\Route::class) as $attr) {
                 $instance = $attr->newInstance();
 
-                if ($instance instanceof \Libxa\Router\Attributes\Route) {
-                    $uri    = $classPrefix . '/' . ltrim($instance->uri, '/');
-                    $methods = $instance->methods;
-                    $route   = $this->addRoute($methods, $uri, [$class, $method->getName()]);
+                $uri   = rtrim($classPrefix, '/') . '/' . ltrim($instance->uri, '/');
+                $route = $this->addRoute($instance->methods, $uri, [$class, $method->getName()]);
 
-                    if ($instance->name) {
-                        $route->name($instance->name);
-                    }
-
-                    // Method-level middleware
-                    foreach ($method->getAttributes(\Libxa\Router\Attributes\Middleware::class) as $mAttr) {
-                        $mInstance = $mAttr->newInstance();
-                        $route->middleware($mInstance->middleware);
-                    }
-
-                    $route->middleware($classMiddleware);
+                if ($instance->name !== '') {
+                    $route->name($instance->name);
                 }
+
+                $route->middleware(array_merge($classMiddleware, $methodMiddleware));
             }
         }
     }
@@ -311,7 +368,21 @@ class Router
         $route = $this->routes->match($request);
 
         if ($route === null) {
-            return new Response(404, ['Content-Type' => 'text/html'], $this->render404());
+            // Distinguish "no such URL" from "wrong verb for this URL".
+            // Returning 404 for both hides real bugs (a form POSTing to a
+            // GET-only route looked identical to a typo in the path) and
+            // violates RFC 9110, which requires 405 + Allow.
+            $allowed = $this->routes->allowedMethods($request->path());
+
+            if ($allowed !== []) {
+                return new Response(
+                    405,
+                    ['Content-Type' => 'text/html; charset=utf-8', 'Allow' => implode(', ', $allowed)],
+                    $this->render405($allowed)
+                );
+            }
+
+            return new Response(404, ['Content-Type' => 'text/html; charset=utf-8'], $this->render404());
         }
 
         // Run through middleware pipeline
@@ -325,20 +396,43 @@ class Router
 
     protected function runAction(Route $route, Request $request): Response
     {
-        $action     = $route->getAction();
-        $parameters = $route->getParameters();
+        $action = $route->getAction();
+
+        // Prefer the per-request copy: the Route object is shared for the
+        // lifetime of the process, so its own parameters can be stale under
+        // a persistent runtime.
+        $parameters = $request->getAttribute('_route_params') ?? $route->getParameters();
 
         $request->setAttribute('_route', $route);
         $this->app->instance('request', $request);
+        $this->app->instance(Request::class, $request);
 
         if ($action instanceof \Closure) {
             $result = $this->app->call($action, $parameters);
         } elseif (is_array($action)) {
             [$class, $method] = $action;
+
+            if (! class_exists($class)) {
+                throw new \RuntimeException(
+                    "Controller [{$class}] for route [{$route->getUri()}] does not exist."
+                );
+            }
+
             $controller = $this->app->make($class);
-            $result     = $this->app->call([$controller, $method], $parameters);
+
+            if (! method_exists($controller, $method)) {
+                throw new \RuntimeException(
+                    "Controller method [{$class}::{$method}()] for route [{$route->getUri()}] does not exist."
+                );
+            }
+
+            $result = $this->app->call([$controller, $method], $parameters);
+        } elseif (is_string($action) && str_contains($action, '@')) {
+            $result = $this->app->call($action, $parameters);
         } else {
-            $result = null;
+            throw new \RuntimeException(
+                "Route [{$route->getUri()}] has no invokable action."
+            );
         }
 
         return $this->toResponse($result);
@@ -350,16 +444,59 @@ class Router
             return $result;
         }
 
-        if (is_array($result) || (is_object($result) && method_exists($result, 'toArray'))) {
-            $data = is_array($result) ? $result : $result->toArray();
-            return new Response(200, ['Content-Type' => 'application/json'], json_encode($data));
+        if ($result === null) {
+            return new Response(200, [], '');
         }
 
         if (is_string($result)) {
             return new Response(200, ['Content-Type' => 'text/html; charset=utf-8'], $result);
         }
 
-        return new Response(200, [], '');
+        if (is_array($result)
+            || $result instanceof \JsonSerializable
+            || (is_object($result) && method_exists($result, 'toArray'))
+        ) {
+            $data = match (true) {
+                is_array($result)                      => $result,
+                $result instanceof \JsonSerializable    => $result,
+                default                                => $result->toArray(),
+            };
+
+            // json_encode returns false on malformed UTF-8 or recursion; the
+            // old code shipped that false straight into the body as "".
+            $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+            if ($json === false) {
+                throw new \RuntimeException(
+                    'Failed to encode the controller result as JSON: ' . json_last_error_msg()
+                );
+            }
+
+            return new Response(200, ['Content-Type' => 'application/json'], $json);
+        }
+
+        if (is_scalar($result)) {
+            return new Response(200, ['Content-Type' => 'text/html; charset=utf-8'], (string) $result);
+        }
+
+        if ($result instanceof \Stringable) {
+            return new Response(200, ['Content-Type' => 'text/html; charset=utf-8'], (string) $result);
+        }
+
+        throw new \RuntimeException(
+            'A route action must return a Response, string, array or JSON-serialisable value; got '
+            . get_debug_type($result) . '.'
+        );
+    }
+
+    protected function render405(array $allowed): string
+    {
+        $list = htmlspecialchars(implode(', ', $allowed), ENT_QUOTES, 'UTF-8');
+
+        return '<!DOCTYPE html><html><head><title>405 — Method Not Allowed</title>
+        <style>body{font-family:system-ui;background:#0f0f0f;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+        .box{text-align:center}h1{font-size:5rem;margin:0;color:#7ab8ff}p{color:#888}</style></head>
+        <body><div class="box"><h1>405</h1><p>Method not allowed — try: ' . $list . '</p></div></body></html>';
     }
 
     protected function render404(): string
@@ -376,14 +513,12 @@ class Router
 
     public function getByName(string $name): ?Route
     {
-        foreach ($this->routes->all() as $route) {
-            if ($route->getName() === $name) {
-                return $route;
-            }
-        }
-        return null;
+        return $this->routes->getByName($name);
     }
 
+    /**
+     * Build an absolute URL for a named route.
+     */
     public function url(string $name, array $parameters = []): string
     {
         $route = $this->getByName($name);
@@ -392,19 +527,58 @@ class Router
             throw new \InvalidArgumentException("Route [$name] not defined.");
         }
 
-        $uri = $route->getUri();
+        $uri     = $route->getUri();
+        $unused  = $parameters;
 
         foreach ($parameters as $key => $value) {
-            $uri = str_replace("{{$key}}", $value, $uri);
-            $uri = str_replace("{{$key}?}", $value, $uri);
+            if (is_array($value) || is_object($value)) {
+                if ($value instanceof \BackedEnum) {
+                    $value = $value->value;
+                } elseif (method_exists($value, 'getRouteKey')) {
+                    $value = $value->getRouteKey();
+                } elseif ($value instanceof \Stringable) {
+                    $value = (string) $value;
+                } else {
+                    throw new \InvalidArgumentException(
+                        "Route parameter [{$key}] for route [{$name}] must be a scalar, got "
+                        . get_debug_type($value) . '.'
+                    );
+                }
+            }
+
+            // rawurlencode: an unescaped value (a slug with a space or '#')
+            // used to silently produce a broken URL.
+            $encoded = rawurlencode((string) $value);
+            $before  = $uri;
+
+            $uri = str_replace(["{{$key}}", "{{$key}?}"], $encoded, $uri);
+
+            if ($uri !== $before) {
+                unset($unused[$key]);
+            }
         }
 
-        // Remove optional params that weren't filled
-        $uri = preg_replace('/\{[^}]+\?\}/', '', $uri);
+        // Any remaining required placeholder means the caller forgot an
+        // argument — better a clear exception than a URL containing "{id}".
+        if (preg_match('/\{(\w+)\}/', $uri, $missing)) {
+            throw new \InvalidArgumentException(
+                "Missing required parameter [{$missing[1]}] for route [{$name}]."
+            );
+        }
 
-        $base = rtrim($this->app->env('APP_URL', 'http://localhost:8000'), '/');
+        // Remove optional params that weren't filled (plus their slash).
+        $uri = preg_replace('#/?\{[^}]+\?\}#', '', $uri) ?? $uri;
 
-        return $base . '/' . ltrim($uri, '/');
+        $base = rtrim((string) $this->app->env('APP_URL', 'http://localhost:8000'), '/');
+        $url  = $base . '/' . ltrim($uri, '/');
+
+        // Leftover parameters become a query string, matching the convention
+        // every mainstream router follows.
+        if ($unused !== []) {
+            $url .= '?' . http_build_query($unused);
+        }
+
+        return $url;
     }
 
     public function getRoutes(): RouteCollection
