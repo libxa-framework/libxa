@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-08
+
+> **Minor bump, not a patch.** Several fixes below change documented behaviour
+> — `Request::header()` now returns real values where it previously returned
+> the default, the container throws instead of injecting `null`, `app()` throws
+> when the application is not bootstrapped, and `Validator::validated()` no
+> longer includes unsubmitted fields. Below 1.0 Composer treats the minor
+> number as the compatibility boundary, so `^0.8.0` will not pick this up.
+
 ### Added
 
 - Middleware groups are now expanded by the pipeline, so `Route::middleware('web')`
@@ -103,5 +112,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Baseline for this changelog. Earlier releases are catalogued in the repository
 history and, for the July 2026 audit, in [CHANGES.md](CHANGES.md).
 
-[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/libxa-framework/libxa/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/libxa-framework/libxa/releases/tag/v0.8.0
