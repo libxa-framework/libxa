@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  # Lets a maintainer re-run the suite without pushing anything.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A new push to the same branch/PR cancels the previous run, except on
+  # main and develop where every commit's result is worth keeping.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
+
+jobs:
+  tests:
+    name: Tests · PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.3", "8.4"]
+        dependencies: [highest]
+        include:
+          # Guards the *lower* bound of every constraint in composer.json.
+          # Without this, a constraint like ^7.0 is only ever proven against
+          # the newest release, and the declared minimum is fiction.
+          - php: "8.3"
+            dependencies: lowest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite, openssl
+          coverage: none
+          ini-values: error_reporting=E_ALL, display_errors=On
+
+      - name: Validate composer.json
+        run: composer validate --strict --no-check-publish
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer/files
+          key: composer-${{ matrix.php }}-${{ matrix.dependencies }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-${{ matrix.php }}-${{ matrix.dependencies }}-
+
+      - name: Install dependencies
+        run: |
+          if [ "${{ matrix.dependencies }}" = "lowest" ]; then
+            composer update --prefer-lowest --prefer-stable --no-interaction --no-progress
+          else
+            composer update --no-interaction --no-progress
+          fi
+
+      - name: Lint every source file
+        run: |
+          set -euo pipefail
+          find src tests -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /dev/null
+
+      - name: Run test suite
+        run: vendor/bin/phpunit --no-coverage --colors=always
+
+  autoloading:
+    name: PSR-4 contract
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite, openssl
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      # Not a style check. A class the autoloader cannot find is a fatal
+      # "Class not found" at runtime, and a class declared in two files is a
+      # fatal "Cannot redeclare class" the moment both load. Both shipped.
+      - name: One class per file, no duplicates
+        run: vendor/bin/phpunit --no-coverage --filter AutoloadingTest
+
+      - name: Autoloader resolves every class
+        run: |
+          composer dump-autoload --optimize --strict-psr
+
+  security:
+    name: Security audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Audit dependencies
+        run: composer audit --no-interaction
+
+  package:
+    name: Distribution archive
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+
+      # What Packagist actually ships is the git archive, filtered by
+      # .gitattributes export-ignore. This proves the archive contains the
+      # source and none of the development scaffolding.
+      - name: Build and inspect the dist archive
+        run: |
+          set -euo pipefail
+          git archive --format=tar HEAD | tar -t > /tmp/dist.txt
+
+          echo "── Archive contents (top level) ──"
+          cut -d/ -f1 /tmp/dist.txt | sort -u
+
+          echo "── Required paths ──"
+          for required in src/ composer.json LICENSE README.md; do
+            grep -q "^${required}" /tmp/dist.txt \
+              || { echo "::error::dist archive is missing ${required}"; exit 1; }
+          done
+
+          echo "── Paths that must NOT ship ──"
+          for excluded in tests/ .github/ phpunit.xml.dist docs/; do
+            if grep -q "^${excluded}" /tmp/dist.txt; then
+              echo "::error::${excluded} is in the dist archive — add it to .gitattributes export-ignore"
+              exit 1
+            fi
+          done
+
+          echo "Dist archive OK ($(wc -l < /tmp/dist.txt) entries)"

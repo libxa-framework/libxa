@@ -47,40 +47,97 @@ class Validator
     //  Run validation
     // ─────────────────────────────────────────────────────────────────
 
+    /** Rules for the field currently being validated (used by min/max). */
+    protected array $currentRules = [];
+
     protected function run(): void
     {
         foreach ($this->rules as $field => $ruleset) {
-            $rules    = is_string($ruleset) ? explode('|', $ruleset) : $ruleset;
-            $value    = $this->data[$field] ?? null;
-            $nullable = in_array('nullable', $rules);
-            $sometimes = in_array('sometimes', $rules);
+            $rules = is_string($ruleset) ? explode('|', $ruleset) : (array) $ruleset;
+            $rules = array_values(array_filter(array_map(
+                static fn($r) => is_string($r) ? trim($r) : $r,
+                $rules
+            ), static fn($r) => $r !== ''));
+
+            $this->currentRules = $rules;
+
+            $present   = array_key_exists($field, $this->data);
+            $value     = $this->data[$field] ?? null;
+            $nullable  = in_array('nullable', $rules, true);
+            $sometimes = in_array('sometimes', $rules, true);
 
             // Skip if 'sometimes' and not present
-            if ($sometimes && ! array_key_exists($field, $this->data)) {
+            if ($sometimes && ! $present) {
                 continue;
             }
 
             // Skip null-able empty values except 'required'
             if ($nullable && ($value === null || $value === '')) {
-                $this->validated[$field] = null;
+                // Only record it if the field was actually submitted, so an
+                // absent optional field does not end up as an explicit null
+                // that a mass-assignment would write over a real column value.
+                if ($present) {
+                    $this->validated[$field] = null;
+                }
+
                 continue;
             }
 
             foreach ($rules as $rule) {
-                if (in_array($rule, ['nullable', 'sometimes'])) continue;
+                if (! is_string($rule)) {
+                    continue;
+                }
+
+                if ($rule === 'nullable' || $rule === 'sometimes') {
+                    continue;
+                }
 
                 $this->applyRule($field, $value, $rule);
             }
 
-            if (! isset($this->errors[$field])) {
+            // Only surface fields that were actually submitted. Recording
+            // `field => null` for every absent optional field meant
+            // validated() handed the model a pile of nulls that overwrote
+            // existing column values on update.
+            if (! isset($this->errors[$field]) && $present) {
                 $this->validated[$field] = $value;
             }
         }
+
+        $this->currentRules = [];
+    }
+
+    /**
+     * Whether the field under validation is declared numeric, which decides
+     * if `min`/`max`/`size` compare the value or its length.
+     */
+    protected function currentFieldIsNumeric(): bool
+    {
+        foreach ($this->currentRules as $rule) {
+            if (is_string($rule) && in_array($rule, ['numeric', 'integer'], true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function applyRule(string $field, mixed $value, string $rule): void
     {
         [$name, $param] = array_pad(explode(':', $rule, 2), 2, null);
+
+        // Rules that need a parameter are silently skipped when it is absent,
+        // rather than reaching explode(',', null) and emitting a deprecation
+        // (PHP 8.1+) or a TypeError under strict_types.
+        $needsParam = [
+            'min', 'max', 'between', 'in', 'not_in', 'regex', 'same', 'different',
+            'after', 'before', 'unique', 'exists', 'size', 'starts_with',
+            'ends_with', 'mimes', 'max_size', 'dimensions', 'date_format',
+        ];
+
+        if (in_array($name, $needsParam, true) && ($param === null || $param === '')) {
+            return;
+        }
 
         match ($name) {
             'required'   => $this->validateRequired($field, $value),
@@ -141,7 +198,12 @@ class Validator
 
     protected function validateInteger(string $f, mixed $v): void
     {
-        if ($v !== null && ! filter_var($v, FILTER_VALIDATE_INT)) $this->fail($f, 'integer', "The $f must be an integer.");
+        // filter_var() returns int(0) for "0", which is falsy — the old
+        // `! filter_var(...)` check therefore rejected a perfectly valid 0
+        // (and, for the same reason, accepted nothing that evaluated falsy).
+        if ($v !== null && filter_var($v, FILTER_VALIDATE_INT) === false) {
+            $this->fail($f, 'integer', "The $f must be an integer.");
+        }
     }
 
     protected function validateNumeric(string $f, mixed $v): void
@@ -178,23 +240,64 @@ class Validator
         if (json_last_error() !== JSON_ERROR_NONE) $this->fail($f, 'json', "The $f must be valid JSON.");
     }
 
+    /**
+     * The comparable "size" of a value.
+     *
+     * Form input arrives as strings, so a field declared `integer|min:18`
+     * used to be measured by mb_strlen('20') === 2 and always failed. When
+     * the ruleset marks the field numeric (or the value is a real int/float,
+     * or an uploaded file) the value itself is compared instead of its length.
+     */
+    protected function sizeOf(mixed $v): float
+    {
+        if (is_int($v) || is_float($v)) {
+            return (float) $v;
+        }
+
+        if ($v instanceof \Libxa\Http\UploadedFile) {
+            return (float) ($v->getSize() / 1024); // kilobytes
+        }
+
+        if (is_array($v) || $v instanceof \Countable) {
+            return (float) count($v);
+        }
+
+        if (is_string($v)) {
+            return $this->currentFieldIsNumeric() && is_numeric($v)
+                ? (float) $v
+                : (float) mb_strlen($v);
+        }
+
+        return (float) $v;
+    }
+
     protected function validateMin(string $f, mixed $v, int $min): void
     {
         if ($v === null) return;
-        $len = is_string($v) ? mb_strlen($v) : (is_array($v) ? count($v) : (float) $v);
-        if ($len < $min) $this->fail($f, 'min', "The $f must be at least $min.");
+
+        if ($this->sizeOf($v) < $min) {
+            $this->fail($f, 'min', "The $f must be at least $min.");
+        }
     }
 
     protected function validateMax(string $f, mixed $v, int $max): void
     {
         if ($v === null) return;
-        $len = is_string($v) ? mb_strlen($v) : (is_array($v) ? count($v) : (float) $v);
-        if ($len > $max) $this->fail($f, 'max', "The $f may not be greater than $max.");
+
+        if ($this->sizeOf($v) > $max) {
+            $this->fail($f, 'max', "The $f may not be greater than $max.");
+        }
     }
 
     protected function validateBetween(string $f, mixed $v, string $param): void
     {
-        [$min, $max] = explode(',', $param);
+        // "between:1" (no comma) used to raise an undefined-offset error.
+        [$min, $max] = array_pad(explode(',', $param, 2), 2, null);
+
+        if ($min === null || $max === null) {
+            return;
+        }
+
         $this->validateMin($f, $v, (int) $min);
         $this->validateMax($f, $v, (int) $max);
     }
@@ -244,34 +347,115 @@ class Validator
         if ($v && strtotime((string) $v) >= strtotime($date)) $this->fail($f, 'before', "The $f must be a date before $date.");
     }
 
+    /**
+     * Count rows matching a column value, optionally ignoring one row id.
+     *
+     * unique/exists used to swallow every Throwable, so a database that was
+     * down, a mistyped table name, or a missing column all made `unique`
+     * silently *pass* — which is precisely the case where it must not, since
+     * it lets duplicate accounts through. Only a genuinely absent DB
+     * connection is tolerated now; real query failures surface.
+     */
+    protected function countMatching(string $param, string $field, mixed $value, ?string &$error = null): ?int
+    {
+        // table,column,ignoreId,idColumn
+        $parts     = array_map('trim', explode(',', $param));
+        $table     = $parts[0] ?? '';
+        $column    = ($parts[1] ?? '') !== '' ? $parts[1] : $field;
+        $ignoreId  = $parts[2] ?? null;
+        $idColumn  = ($parts[3] ?? '') !== '' ? $parts[3] : 'id';
+
+        // Identifiers come from the rule string (developer-authored), but a
+        // rule built from request data would otherwise be a direct injection
+        // point. Reject anything that is not a plain identifier.
+        foreach ([$table, $column, $idColumn] as $identifier) {
+            if (! preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $identifier)) {
+                throw new \InvalidArgumentException(
+                    "Invalid table/column name [{$identifier}] in validation rule for [{$field}]."
+                );
+            }
+        }
+
+        try {
+            $pdo = \Libxa\Atlas\Connection\ConnectionPool::getInstance()->get();
+        } catch (\Throwable $e) {
+            $error = $e->getMessage();
+            return null;
+        }
+
+        $quote = $this->identifierQuoter($pdo);
+        $sql   = "SELECT COUNT(*) FROM {$quote($table)} WHERE {$quote($column)} = ?";
+        $args  = [$value];
+
+        if ($ignoreId !== null && $ignoreId !== '' && strtoupper($ignoreId) !== 'NULL') {
+            $sql   .= " AND {$quote($idColumn)} <> ?";
+            $args[] = $ignoreId;
+        }
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($args);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
+     * Identifier quoting differs per driver — backticks are a MySQL/SQLite
+     * thing and are a syntax error on PostgreSQL, where these rules used to
+     * throw and then be swallowed into a silent pass.
+     */
+    protected function identifierQuoter(\PDO $pdo): \Closure
+    {
+        $driver = (string) $pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+
+        return match ($driver) {
+            'mysql'  => static fn(string $id): string => '`' . $id . '`',
+            'sqlsrv' => static fn(string $id): string => '[' . $id . ']',
+            default  => static fn(string $id): string => '"' . $id . '"',
+        };
+    }
+
     protected function validateUnique(string $f, mixed $v, string $param): void
     {
-        [$table, $column] = array_pad(explode(',', $param), 2, $f);
-        try {
-            $pdo  = \Libxa\Atlas\Connection\ConnectionPool::getInstance()->get();
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM `$table` WHERE `$column` = ?");
-            $stmt->execute([$v]);
-            if ($stmt->fetchColumn() > 0) $this->fail($f, 'unique', "The $f has already been taken.");
-        } catch (\Throwable) {
-            // Silently fail if DB not available during validation
+        if ($v === null || $v === '') {
+            return;
+        }
+
+        $count = $this->countMatching($param, $f, $v, $error);
+
+        if ($count === null) {
+            // No database at all (e.g. unit tests) — nothing to check.
+            return;
+        }
+
+        if ($count > 0) {
+            $this->fail($f, 'unique', "The $f has already been taken.");
         }
     }
 
     protected function validateExists(string $f, mixed $v, string $param): void
     {
-        [$table, $column] = array_pad(explode(',', $param), 2, $f);
-        try {
-            $pdo  = \Libxa\Atlas\Connection\ConnectionPool::getInstance()->get();
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM `$table` WHERE `$column` = ?");
-            $stmt->execute([$v]);
-            if ($stmt->fetchColumn() == 0) $this->fail($f, 'exists', "The selected $f is invalid.");
-        } catch (\Throwable) {}
+        if ($v === null || $v === '') {
+            return;
+        }
+
+        $count = $this->countMatching($param, $f, $v, $error);
+
+        if ($count === null) {
+            return;
+        }
+
+        if ($count === 0) {
+            $this->fail($f, 'exists', "The selected $f is invalid.");
+        }
     }
 
     protected function validateSize(string $f, mixed $v, int $size): void
     {
-        $len = is_string($v) ? mb_strlen($v) : (is_array($v) ? count($v) : (float) $v);
-        if ($len !== $size) $this->fail($f, 'size', "The $f must be $size.");
+        if ($v === null) return;
+
+        if ((int) $this->sizeOf($v) !== $size) {
+            $this->fail($f, 'size', "The $f must be $size.");
+        }
     }
 
     protected function validateAlpha(string $f, mixed $v): void
@@ -313,19 +497,17 @@ class Validator
 
     protected function validateFile(string $f, mixed $v): void
     {
-        $type = is_object($v) ? get_class($v) : gettype($v);
-        logger("VALIDATING FILE for field [$f]. Type: " . $type, [], 'info');
-
+        // Debug logger() calls used to run here on every single file
+        // validation — three log lines per upload in production, and a hard
+        // dependency on a booted container just to validate a form.
         if ($v instanceof \Libxa\Http\UploadedFile) {
-            if (!$v->isValid()) {
-                logger("FILE INVALID for field [$f]. Status: " . ($v->isValid() ? 'valid' : 'invalid'), [], 'warning');
+            if (! $v->isValid()) {
                 $this->fail($f, 'file', "The $f must be a valid uploaded file.");
             }
             return;
         }
 
         if ($v !== null) {
-            logger("FILE VALIDATION FAILED for field [$f]. Value is not an UploadedFile instance.", [], 'error');
             $this->fail($f, 'file', "The $f must be a file.");
         }
     }

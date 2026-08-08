@@ -9,6 +9,14 @@ namespace Libxa\Container;
  *
  * Tracks the current execution context (http, cli, queue, ws, desktop, test)
  * and exposes it to the container for context-aware binding resolution.
+ *
+ * Note: this file also used to declare a second copy of
+ * ContextualBindingBuilder, which already has its own file. Loading both — as
+ * happens the moment an application uses ->when() after the Application
+ * constructor has instantiated a ContextGraph — is a hard fatal:
+ * "Cannot redeclare class Libxa\Container\ContextualBindingBuilder".
+ * The whenContext() method that copy carried has been merged into the real
+ * ContextualBindingBuilder.
  */
 class ContextGraph
 {
@@ -23,55 +31,4 @@ class ContextGraph
     public function isWs(): bool      { return $this->context === 'ws'; }
     public function isDesktop(): bool { return $this->context === 'desktop'; }
     public function isTest(): bool    { return $this->context === 'test'; }
-}
-
-/**
- * Context-aware binding builder.
- *
- * Usage:
- *   $container->when(SomeController::class)
- *             ->needs(PaymentGateway::class)
- *             ->give(fn() => new StripeGateway());
- */
-class ContextualBindingBuilder
-{
-    public function __construct(
-        protected Container $container,
-        protected string    $concrete
-    ) {}
-
-    public function needs(string $abstract): static
-    {
-        $this->abstract = $abstract;
-        return $this;
-    }
-
-    public function give(\Closure|string $implementation): void
-    {
-        $this->container->addContextualBinding(
-            $this->concrete,
-            $this->abstract,
-            $implementation
-        );
-    }
-
-    // Contextual + context-aware binding:
-    //   ->whenContext('http', fn() => new StripeGateway())
-    //   ->whenContext('test', fn() => new FakeGateway())
-    public function whenContext(string $context, \Closure $factory): static
-    {
-        $app = \Libxa\Foundation\Application::getInstance();
-
-        if ($app && $app->context() === $context) {
-            $this->container->addContextualBinding(
-                $this->concrete,
-                $this->abstract,
-                $factory
-            );
-        }
-
-        return $this;
-    }
-
-    protected string $abstract = '';
 }

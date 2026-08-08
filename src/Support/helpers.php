@@ -12,7 +12,18 @@ if (! function_exists('app')) {
             return $instance;
         }
 
-        return $instance?->make($abstract, $params);
+        // `$instance?->make(...)` silently returned null when the application
+        // had not been created, so the failure surfaced far away as
+        // "Call to a member function render() on null" with no hint about the
+        // real cause. Fail where the mistake actually is.
+        if ($instance === null) {
+            throw new \RuntimeException(
+                "Cannot resolve [{$abstract}]: the application has not been bootstrapped. "
+                . 'Create a Libxa\\Foundation\\Application before using framework helpers.'
+            );
+        }
+
+        return $instance->make($abstract, $params);
     }
 }
 
@@ -69,10 +80,26 @@ if (! function_exists('redirect')) {
 }
 
 if (! function_exists('back')) {
-    function back(): \Libxa\Http\Response
+    /**
+     * Redirect back to the referring page.
+     *
+     * Guards two things the old one-liner did not: request() can legitimately
+     * be null (this is called from the exception handler, which may run before
+     * a Request is bound), and the Referer header is client-controlled, so it
+     * is reduced to a same-origin target instead of being echoed into a
+     * Location header verbatim.
+     */
+    function back(string $fallback = '/'): \Libxa\Http\Response
     {
-        $referer = request()->header('Referer');
-        return redirect($referer ?: '/');
+        $request = \Libxa\Foundation\Application::getInstance()?->has('request')
+            ? app('request')
+            : null;
+
+        $referer = $request instanceof \Libxa\Http\Request
+            ? $request->header('Referer')
+            : ($_SERVER['HTTP_REFERER'] ?? null);
+
+        return redirect(\Libxa\Http\Response::safeReferer($referer ?: null, $fallback));
     }
 }
 
@@ -144,15 +171,45 @@ if (! function_exists('report')) {
     }
 }
 
+if (! function_exists('libxa_ensure_session')) {
+    /**
+     * Start the PHP session if it is safe to do so.
+     *
+     * The helpers below used to call session_start() with only a
+     * session_status() check. That is not enough: once any output has been
+     * emitted (a view echoing before the helper runs, a stray BOM, a notice)
+     * session_start() emits "Session cannot be started after headers have
+     * already been sent" and returns false. Under CLI it is meaningless
+     * altogether. $_SESSION is still made available as a plain array so
+     * callers never have to null-check it.
+     */
+    function libxa_ensure_session(): bool
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            return true;
+        }
+
+        if (PHP_SAPI === 'cli' || session_status() === PHP_SESSION_DISABLED || headers_sent()) {
+            if (! isset($_SESSION)) {
+                $_SESSION = [];
+            }
+
+            return false;
+        }
+
+        return @session_start();
+    }
+}
+
 if (! function_exists('csrf_token')) {
     function csrf_token(): string
     {
-        if (! isset($_SESSION['_token'])) {
-            if (session_status() === PHP_SESSION_NONE) {
-                session_start();
-            }
+        libxa_ensure_session();
+
+        if (! isset($_SESSION['_token']) || ! is_string($_SESSION['_token'])) {
             $_SESSION['_token'] = bin2hex(random_bytes(32));
         }
+
         return $_SESSION['_token'];
     }
 }
@@ -165,9 +222,32 @@ if (! function_exists('csrf_field')) {
 }
 
 if (! function_exists('old')) {
+    /**
+     * Previously submitted input, repopulated after a failed validation.
+     *
+     * The kernel flashes the whole input array under the 'old' key, but
+     * ->with('name', $value) writes individual keys — both spellings are
+     * checked so old() works no matter which path flashed the data. Calling
+     * old() with no key returns the whole bag instead of always returning
+     * the default, which is what the previous single-expression body did.
+     */
     function old(?string $key = null, mixed $default = ''): mixed
     {
-        return $_SESSION['_flash']['old']['old'][$key] ?? $default;
+        $bag = $_SESSION['_flash']['old']['old'] ?? [];
+
+        if (! is_array($bag)) {
+            $bag = [];
+        }
+
+        if ($key === null) {
+            return $bag;
+        }
+
+        if (array_key_exists($key, $bag)) {
+            return $bag[$key];
+        }
+
+        return $_SESSION['_flash']['old'][$key] ?? $default;
     }
 }
 
@@ -177,9 +257,7 @@ if (! function_exists('errors')) {
      */
     function errors(): \Libxa\Validation\MessageBag
     {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
+        libxa_ensure_session();
 
         $errors = $_SESSION['_flash']['old']['errors'] ?? [];
 
@@ -203,9 +281,7 @@ if (! function_exists('session')) {
      */
     function session(?string $key = null, mixed $default = null): mixed
     {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
+        libxa_ensure_session();
 
         if ($key === null) {
             return app()->has('session') ? app('session') : $_SESSION;

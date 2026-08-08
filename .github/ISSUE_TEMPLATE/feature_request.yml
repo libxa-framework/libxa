@@ -1,0 +1,55 @@
+name: Feature request
+description: Propose new functionality or a change to existing behaviour
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched existing issues and discussions for this idea
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: >
+        Describe the situation you are in, not the solution you have in mind.
+        The best feature requests start from a real thing that was hard to do.
+      placeholder: |
+        I need to exempt a Stripe webhook route from CSRF, but the middleware
+        has no exclusion list, so my only option is removing it globally.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What the API might look like, if you have a view on it.
+      render: php
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including how you are working around it today.
+
+  - type: dropdown
+    id: breaking
+    attributes:
+      label: Would this break existing code?
+      options:
+        - "No — purely additive"
+        - "Yes — existing behaviour changes"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a pull request for this

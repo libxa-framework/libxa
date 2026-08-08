@@ -140,6 +140,7 @@ class Application extends SymfonyApplication
             new Commands\Route\ClearCommand($this->app),
             new Commands\Route\CacheCommand($this->app),
             new Commands\View\ClearCommand($this->app),
+            new Commands\View\CacheCommand($this->app),
             new Commands\EnvCommand($this->app),
             new Commands\TestCommand($this->app),
             new Commands\Package\DiscoverCommand($this->app),

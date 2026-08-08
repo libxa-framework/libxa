@@ -4,12 +4,23 @@
          bootstrap="vendor/autoload.php"
          colors="true"
          cacheDirectory=".phpunit.cache"
-         displayDeprecations="true"
-         displayWarnings="true"
+         displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnTestsThatTriggerWarnings="true"
+         displayDetailsOnTestsThatTriggerErrors="true"
+         failOnWarning="false"
+         beStrictAboutOutputDuringTests="false"
 >
     <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
+        </testsuite>
+        <testsuite name="Legacy">
+            <directory>tests</directory>
+            <exclude>tests/Unit</exclude>
+            <exclude>tests/Feature</exclude>
         </testsuite>
     </testsuites>
     <source>

@@ -27,6 +27,51 @@ class ConnectionPool
     public function configure(array $configs): void
     {
         $this->configs = $configs;
+
+        // Drop live handles so the new configuration actually takes effect.
+        // Without this, calling configure() after something had already
+        // resolved 'default' (which the boot order makes easy) left the pool
+        // serving connections built from the *old* config for the rest of the
+        // process — the classic "why is it still hitting the dev database".
+        $this->connections = [];
+    }
+
+    /**
+     * Inject a ready-made PDO handle.
+     *
+     * Needed by tests and by tooling that has to run against an in-memory
+     * database: previously the only way in was through configure(), so there
+     * was no way to share a single `sqlite::memory:` handle (each new
+     * connection to :memory: is a brand-new, empty database).
+     */
+    public function setConnection(string $name, \PDO $pdo): void
+    {
+        $this->connections[$name] = $pdo;
+    }
+
+    /**
+     * Close all pooled connections and forget the configuration.
+     */
+    public function reset(): void
+    {
+        $this->connections = [];
+        $this->configs     = [];
+    }
+
+    /**
+     * Discard the process-wide singleton (test isolation, worker restarts).
+     */
+    public static function resetInstance(): void
+    {
+        static::$instance = null;
+    }
+
+    /**
+     * Whether a connection has already been established.
+     */
+    public function isConnected(string $name = 'default'): bool
+    {
+        return isset($this->connections[$name]);
     }
 
     /**

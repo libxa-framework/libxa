@@ -1,0 +1,166 @@
+name: Release
+
+# Tags are created by a human (see docs/RELEASING.md). This workflow's job is
+# to *verify* the tag and publish the GitHub Release — never to create a tag.
+# Packagist publishes independently via its push webhook.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify tag
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout (full history, needed to check ancestry)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${version}"
+
+      - name: Tag must be SemVer
+        run: |
+          set -euo pipefail
+          if ! [[ "${{ steps.version.outputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'${GITHUB_REF_NAME}' is not a SemVer tag (expected vMAJOR.MINOR.PATCH)"
+            exit 1
+          fi
+
+      # A lightweight tag has no author, date or message — no provenance for
+      # something that is about to be published permanently.
+      - name: Tag must be annotated
+        run: |
+          set -euo pipefail
+          if [ "$(git cat-file -t "${GITHUB_REF_NAME}")" != "tag" ]; then
+            echo "::error::'${GITHUB_REF_NAME}' is a lightweight tag. Use: git tag -a ${GITHUB_REF_NAME} -m 'Release ${GITHUB_REF_NAME}'"
+            exit 1
+          fi
+
+      # main is the published branch. A tag anywhere else would publish code
+      # that never went through a reviewed release PR.
+      - name: Tag must be on main
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=0
+          if ! git merge-base --is-ancestor "${GITHUB_REF_NAME}^{commit}" origin/main; then
+            echo "::error::${GITHUB_REF_NAME} is not an ancestor of main. Tags are cut from main only — see docs/BRANCHING.md"
+            exit 1
+          fi
+
+      - name: Changelog must document this version
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          if ! grep -qE "^## \[${version}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [${version}]' section"
+            exit 1
+          fi
+
+      - name: Extract release notes
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          # Everything between this version's heading and the next one.
+          awk -v v="${version}" '
+            $0 ~ "^## \\["v"\\]" { found = 1; next }
+            found && /^## \[/     { exit }
+            found                 { print }
+          ' CHANGELOG.md > /tmp/notes.md
+
+          if [ ! -s /tmp/notes.md ]; then
+            echo "::error::The [${version}] changelog section is empty"
+            exit 1
+          fi
+
+          cat /tmp/notes.md
+
+      - name: Upload release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: /tmp/notes.md
+
+  test:
+    name: Test at tag · PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    needs: verify
+
+    strategy:
+      fail-fast: true
+      matrix:
+        php: ["8.3", "8.4"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite, openssl
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      # The tagged commit is exactly what consumers download. Re-run the suite
+      # here rather than trusting the CI run from the PR that preceded it.
+      - name: Run test suite
+        run: vendor/bin/phpunit --no-coverage --colors=always
+
+      - name: Security audit
+        run: composer audit --no-interaction
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [verify, test]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: /tmp
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prerelease=""
+          if [[ "${{ needs.verify.outputs.version }}" == *-* ]]; then
+            prerelease="--prerelease"
+          fi
+
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file /tmp/notes.md \
+            --verify-tag \
+            ${prerelease}
+
+      - name: Reminders
+        run: |
+          cat <<'EOF'
+          ::notice::Release published. Two manual steps remain:
+            1. Confirm https://packagist.org/packages/libxa/framework shows this version.
+               If not: repo Settings > Webhooks > Recent Deliveries.
+            2. Back-merge main into develop, or the next release reverts this one:
+                 git checkout develop && git merge --no-ff origin/main && git push
+          EOF

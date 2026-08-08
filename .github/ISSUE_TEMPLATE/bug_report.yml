@@ -1,0 +1,98 @@
+name: Bug report
+description: Something in the framework behaves incorrectly
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting.
+
+        **Security issue?** Stop — do not file it here. Follow
+        [SECURITY.md](https://github.com/libxa-framework/libxa/blob/main/SECURITY.md)
+        for private disclosure. A public report puts every LibxaFrame
+        application at risk before a fix exists.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: I am on the latest release, or I have confirmed the bug still exists on `develop`
+          required: true
+        - label: This is a framework bug, not a question about my own application code
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: LibxaFrame version
+      placeholder: "0.8.0, or dev-main @ commit abc1234"
+    validations:
+      required: true
+
+  - type: input
+    id: php
+    attributes:
+      label: PHP version
+      placeholder: "8.4.19"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Linux, macOS, Windows, Docker, Other]
+    validations:
+      required: true
+
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database driver
+      options: ["Not relevant", SQLite, MySQL / MariaDB, PostgreSQL, Other]
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you observed, and what you expected instead.
+      placeholder: |
+        Expected: Router::url('users.show', ['id' => 7]) returns /users/7
+        Actual:   it throws InvalidArgumentException
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: >
+        The smallest code that shows the problem. A failing test is the single
+        most useful thing you can send — it turns a report into a fix.
+      render: php
+      placeholder: |
+        $router = new Router($app);
+        $router->get('/users/{id}', fn() => 'ok')->name('users.show');
+
+        // throws, expected "/users/7"
+        echo $router->url('users.show', ['id' => 7]);
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Error output
+      description: The full message and stack trace, if there is one.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Workarounds you found, when it started, related configuration.

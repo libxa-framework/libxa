@@ -15,6 +15,18 @@ use Libxa\Blade\BladeStack;
  */
 class BladeCompilerTest extends TestCase
 {
+    /**
+     * Compiled @include/@component output calls app('blade')->render(...),
+     * so any test that renders a template with a partial needs the engine
+     * bound in the container. Without it the failure surfaces as
+     * "Call to a member function render() on null", masking the real result.
+     */
+    protected function bindEngine(BladeEngine $engine): void
+    {
+        $app = new \Libxa\Foundation\Application(sys_get_temp_dir());
+        $app->instance('blade', $engine);
+    }
+
     protected function compileAndLint(Compiler $compiler, string $source): string
     {
         $compiled = $compiler->compile($source);
@@ -29,7 +41,7 @@ class BladeCompilerTest extends TestCase
         return $compiled;
     }
 
-    protected function run(string $compiled, array $vars = []): string
+    protected function runCompiled(string $compiled, array $vars = []): string
     {
         $tmp = tempnam(sys_get_temp_dir(), 'blade_run_') . '.php';
         file_put_contents($tmp, $compiled);
@@ -51,7 +63,7 @@ class BladeCompilerTest extends TestCase
         $GLOBALS['__blade_test_f'] = fn($a, $b) => $a + $b;
         $compiledWithHelper = str_replace('f(2,3)', '(1+4)', $compiled);
 
-        $this->assertSame('MATCHED', trim($this->run($compiledWithHelper, ['x' => 5])));
+        $this->assertSame('MATCHED', trim($this->runCompiled($compiledWithHelper, ['x' => 5])));
     }
 
     public function test_deeply_nested_parens_do_not_truncate_the_condition(): void
@@ -59,21 +71,21 @@ class BladeCompilerTest extends TestCase
         $compiler = new Compiler();
         $src = '@if(($a && ($b || ($c && ($d || $e))))) deep @endif';
         $compiled = $this->compileAndLint($compiler, $src);
-        $this->assertSame('deep', trim($this->run($compiled, ['a' => true, 'b' => false, 'c' => true, 'd' => false, 'e' => true])));
+        $this->assertSame('deep', trim($this->runCompiled($compiled, ['a' => true, 'b' => false, 'c' => true, 'd' => false, 'e' => true])));
     }
 
     public function test_section_without_extends_does_not_warn_or_error(): void
     {
         $compiler = new Compiler();
         $compiled = $this->compileAndLint($compiler, "@section('widget')<b>hi</b>@endsection@yield('widget')");
-        $this->assertSame('<b>hi</b>', trim($this->run($compiled)));
+        $this->assertSame('<b>hi</b>', trim($this->runCompiled($compiled)));
     }
 
     public function test_verbatim_block_is_not_compiled(): void
     {
         $compiler = new Compiler();
         $compiled = $this->compileAndLint($compiler, '@verbatim{{ message }}@endverbatim {{ 1 + 1 }}');
-        $this->assertSame('{{ message }} 2', trim($this->run($compiled)));
+        $this->assertSame('{{ message }} 2', trim($this->runCompiled($compiled)));
     }
 
     public function test_push_and_stack_accumulate_in_order(): void
@@ -81,7 +93,7 @@ class BladeCompilerTest extends TestCase
         BladeStack::flush();
         $compiler = new Compiler();
         $compiled = $this->compileAndLint($compiler, "@push('s')A@endpush@push('s')B@endpush<x>@stack('s')</x>");
-        $this->assertSame('<x>A' . "\n" . 'B</x>', trim($this->run($compiled)));
+        $this->assertSame('<x>A' . "\n" . 'B</x>', trim($this->runCompiled($compiled)));
     }
 
     public function test_has_section_directive_used_by_the_default_starter_kit_layout(): void
@@ -92,8 +104,8 @@ class BladeCompilerTest extends TestCase
         // the compiled cache file for the app's own default layout.
         $compiler = new Compiler();
         $compiled = $this->compileAndLint($compiler, "@hasSection('footer')shown@endif");
-        $this->assertSame('shown', trim($this->run($compiled, ['__sections' => ['footer' => 'x']])));
-        $this->assertSame('', trim($this->run($compiled, ['__sections' => []])));
+        $this->assertSame('shown', trim($this->runCompiled($compiled, ['__sections' => ['footer' => 'x']])));
+        $this->assertSame('', trim($this->runCompiled($compiled, ['__sections' => []])));
     }
 
     public function test_view_name_containing_a_quote_does_not_break_compiled_php(): void
@@ -151,6 +163,7 @@ class BladeCompilerTest extends TestCase
         file_put_contents($viewsDir . '/b.blade.php', "@include('a')");
 
         $engine = new BladeEngine($viewsDir, $cacheDir);
+        $this->bindEngine($engine);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessageMatches('/render depth exceeded/i');

@@ -1,0 +1,36 @@
+version: 2
+
+updates:
+  - package-ecosystem: composer
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    # Dependency PRs target develop like every other change; main only ever
+    # receives reviewed release/hotfix merges.
+    target-branch: develop
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      # One PR for the whole dev toolchain instead of five separate ones.
+      dev-tooling:
+        dependency-type: development
+        patterns: ["*"]
+      symfony:
+        patterns: ["symfony/*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    target-branch: develop
+    labels: ["dependencies", "ci"]
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]

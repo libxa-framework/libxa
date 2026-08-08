@@ -47,7 +47,33 @@ class Container implements ContainerInterface
 
     public function has(string $id): bool
     {
+        $id = $this->resolveAlias($id);
+
         return isset($this->bindings[$id]) || isset($this->instances[$id]);
+    }
+
+    /**
+     * Follow an alias chain to the underlying abstract name.
+     *
+     * Guards against self-referential / cyclic aliases (alias('a','b');
+     * alias('b','a')) which would otherwise spin forever.
+     */
+    protected function resolveAlias(string $abstract): string
+    {
+        $seen = [];
+
+        while (isset($this->aliases[$abstract])) {
+            if (isset($seen[$abstract])) {
+                throw new \RuntimeException(
+                    "Circular alias chain detected while resolving [{$abstract}]."
+                );
+            }
+
+            $seen[$abstract] = true;
+            $abstract        = $this->aliases[$abstract];
+        }
+
+        return $abstract;
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -59,6 +85,7 @@ class Container implements ContainerInterface
      */
     public function bind(string $abstract, Closure|string|null $concrete = null, bool $singleton = false): void
     {
+        $abstract   = $this->resolveAlias($abstract);
         $concrete ??= $abstract;
 
         $this->bindings[$abstract] = [
@@ -83,9 +110,19 @@ class Container implements ContainerInterface
      */
     public function instance(string $abstract, mixed $instance): mixed
     {
-        $this->instances[$abstract] = $instance;
+        $this->instances[$this->resolveAlias($abstract)] = $instance;
 
         return $instance;
+    }
+
+    /**
+     * Drop a resolved singleton so the next make() rebuilds it.
+     * Needed by long-running workers (queue, websocket) that must reset
+     * per-request state between jobs instead of leaking it forever.
+     */
+    public function forgetInstance(string $abstract): void
+    {
+        unset($this->instances[$this->resolveAlias($abstract)]);
     }
 
     /**
@@ -122,6 +159,11 @@ class Container implements ContainerInterface
      */
     public function make(string $abstract, array $parameters = []): mixed
     {
+        // An alias must be collapsed *before* anything else, otherwise
+        // `alias(Foo::class, 'foo')` + `singleton(Foo::class)` would rebuild
+        // a fresh object every time it is resolved through the short name.
+        $abstract = $this->resolveAlias($abstract);
+
         // Return cached singleton instances
         if (isset($this->instances[$abstract])) {
             return $this->instances[$abstract];
@@ -133,8 +175,9 @@ class Container implements ContainerInterface
         // Build it
         $object = $this->build($concrete, $parameters);
 
-        // Cache if singleton
-        if ($this->isSingleton($abstract)) {
+        // Cache if singleton. Never cache when the caller supplied explicit
+        // constructor overrides — that object is not the canonical singleton.
+        if ($parameters === [] && $this->isSingleton($abstract)) {
             $this->instances[$abstract] = $object;
         }
 
@@ -143,9 +186,6 @@ class Container implements ContainerInterface
 
     protected function getConcrete(string $abstract): Closure|string
     {
-        // Resolve alias first
-        $abstract = $this->aliases[$abstract] ?? $abstract;
-
         // Contextual binding — check if the current build stack has a match
         if (! empty($this->buildStack)) {
             $buildingClass = end($this->buildStack);
@@ -178,18 +218,31 @@ class Container implements ContainerInterface
             throw new \RuntimeException("Target [$concrete] is not instantiable.");
         }
 
-        $this->buildStack[] = $concrete;
+        // Two classes that depend on each other would otherwise recurse until
+        // PHP exhausts the stack and the process dies with no usable error.
+        if (in_array($concrete, $this->buildStack, true)) {
+            throw new \RuntimeException(
+                'Circular dependency detected while resolving ['
+                . implode(' -> ', [...$this->buildStack, $concrete]) . '].'
+            );
+        }
 
         $constructor = $reflector->getConstructor();
 
         if ($constructor === null) {
-            array_pop($this->buildStack);
             return new $concrete();
         }
 
-        $dependencies = $this->resolveDependencies($constructor->getParameters(), $parameters);
+        // try/finally: if a dependency throws, the stack must still unwind or
+        // every later resolution in this process sees a corrupted build stack
+        // (wrong contextual bindings, bogus circular-dependency errors).
+        $this->buildStack[] = $concrete;
 
-        array_pop($this->buildStack);
+        try {
+            $dependencies = $this->resolveDependencies($constructor->getParameters(), $parameters);
+        } finally {
+            array_pop($this->buildStack);
+        }
 
         return $reflector->newInstanceArgs($dependencies);
     }
@@ -201,35 +254,77 @@ class Container implements ContainerInterface
         foreach ($parameters as $param) {
             $name = $param->getName();
 
-            // Manual override takes priority
-            if (isset($overrides[$name])) {
+            // Manual override takes priority. array_key_exists (not isset) so an
+            // explicit null override is honoured instead of silently re-resolved.
+            if (array_key_exists($name, $overrides)) {
                 $dependencies[] = $overrides[$name];
+                continue;
+            }
+
+            // Variadics swallow the remaining positional overrides. Appending a
+            // single null here would pass a bogus argument to the constructor.
+            if ($param->isVariadic()) {
                 continue;
             }
 
             $type = $param->getType();
 
             if ($type instanceof \ReflectionNamedType && ! $type->isBuiltin()) {
-                $className = $type->getName();
-                try {
-                    $dependencies[] = $this->make($className);
-                } catch (\Throwable $e) {
-                    if ($param->isDefaultValueAvailable()) {
-                        $dependencies[] = $param->getDefaultValue();
-                    } elseif ($param->allowsNull()) {
-                        $dependencies[] = null;
-                    } else {
-                        throw $e;
-                    }
-                }
-            } elseif ($param->isDefaultValueAvailable()) {
-                $dependencies[] = $param->getDefaultValue();
-            } else {
-                $dependencies[] = null;
+                $dependencies[] = $this->resolveClassDependency($param, $type->getName());
+                continue;
             }
+
+            if ($param->isDefaultValueAvailable()) {
+                $dependencies[] = $param->getDefaultValue();
+                continue;
+            }
+
+            // hasType() matters: an *untyped* parameter reports allowsNull()
+            // === true, so checking allowsNull() alone silently filled every
+            // untyped required argument with null.
+            if ($param->hasType() && $param->allowsNull()) {
+                $dependencies[] = null;
+                continue;
+            }
+
+            // Previously this injected null, which turned a container
+            // misconfiguration into a TypeError deep inside the constructor
+            // (or, worse, silently constructed a half-initialised object).
+            $where = $this->buildStack ? end($this->buildStack) : 'closure';
+
+            throw new \RuntimeException(
+                "Unresolvable dependency: parameter \${$name} in [{$where}] has no type hint and no default value."
+            );
         }
 
         return $dependencies;
+    }
+
+    /**
+     * Resolve a single class-typed constructor parameter, falling back to the
+     * declared default / null only when the class genuinely cannot be built.
+     */
+    protected function resolveClassDependency(\ReflectionParameter $param, string $className): mixed
+    {
+        try {
+            return $this->make($className);
+        } catch (\Throwable $e) {
+            // A circular dependency is a programming error, never something to
+            // paper over with a default value — it must surface to the developer.
+            if ($e instanceof \RuntimeException && str_contains($e->getMessage(), 'Circular dependency')) {
+                throw $e;
+            }
+
+            if ($param->isDefaultValueAvailable()) {
+                return $param->getDefaultValue();
+            }
+
+            if ($param->allowsNull()) {
+                return null;
+            }
+
+            throw $e;
+        }
     }
 
     protected function isSingleton(string $abstract): bool
