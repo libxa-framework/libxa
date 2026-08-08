@@ -122,6 +122,31 @@ git merge --no-ff origin/main
 git push origin develop
 ```
 
+> ### Use a **merge commit**, never squash
+>
+> This applies to the release PR into `main` *and* to the back-merge PR into
+> `develop`. Both are what make `main` reachable from `develop`.
+>
+> Squashing rewrites them into a brand-new commit with no link to the branch it
+> came from. Git then no longer sees `main` as an ancestor of `develop`, even
+> though the *content* is identical — and the next release branch conflicts on
+> `CHANGELOG.md` with two "unrelated" edits.
+>
+> That is exactly what happened between v0.9.0 and v0.10.0: the back-merge was
+> squash-merged, and the v0.10.0 release PR came back `CONFLICTING` for no
+> visible reason.
+>
+> For this reason `main` deliberately does **not** enable *Require linear
+> history*. Linear history and git-flow are mutually exclusive: git-flow is
+> built on merge commits. Feature PRs into `develop` may still be squashed
+> freely — only `release/*` and `hotfix/*` merges must preserve ancestry.
+>
+> To check ancestry is intact at any time:
+>
+> ```bash
+> git merge-base --is-ancestor origin/main origin/develop && echo OK
+> ```
+
 ## 9. Clean up
 
 ```bash
