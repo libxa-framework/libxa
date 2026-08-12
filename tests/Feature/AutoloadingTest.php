@@ -144,7 +144,6 @@ class AutoloadingTest extends TestCase
             \Libxa\Support\NumberableProxy::class,
             \Libxa\Blade\SharedData::class,
             \Libxa\Events\Event::class,
-            \Libxa\Nova\Field::class,
             \Libxa\Atlas\Schema\ColumnDefinition::class,
             \Libxa\Atlas\Schema\ForeignKeyDefinition::class,
             \Libxa\Atlas\AI\AiQueryResult::class,

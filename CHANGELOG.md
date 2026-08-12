@@ -15,6 +15,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-12
+
+> **Minor bump, not a patch.** Removing the Nova module deletes public classes,
+> so anything referencing `Libxa\Nova\*` stops resolving. Below 1.0 Composer
+> treats the minor number as the compatibility boundary, so `^0.10.0` will not
+> pick this up.
+
+### Removed
+
+- **The Nova admin module.** `Libxa\Nova\*`, `NovaServiceProvider`, and its
+  registration among the core providers.
+
+  It did not work. Its controller methods took `$resourceKey` while its routes
+  declared `{resource}`, so the container could not resolve the parameter and
+  every Nova route raised "Unresolvable dependency" rather than rendering
+  anything. It also claimed the `/admin` prefix by default, which collided
+  with any admin package a project installed, and whichever registered first
+  silently won.
+
+  Admin panels are a package concern rather than a framework one, and there is
+  a working one in [lib-admin](https://github.com/libxa-framework/lib-admin).
+
 ## [0.10.3] - 2026-08-12
 
 ### Added
@@ -199,7 +221,8 @@ picks this up without any action.
 Baseline for this changelog. Earlier releases are catalogued in the repository
 history and, for the July 2026 audit, in [CHANGES.md](CHANGES.md).
 
-[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.10.3...HEAD
+[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/libxa-framework/libxa/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/libxa-framework/libxa/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/libxa-framework/libxa/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/libxa-framework/libxa/compare/v0.10.0...v0.10.1

@@ -571,7 +571,6 @@ class Application extends Container
             \Libxa\Providers\BroadcastServiceProvider::class,
             \Libxa\Providers\AiServiceProvider::class,
             \Libxa\Providers\SecurityServiceProvider::class,
-            \Libxa\Providers\NovaServiceProvider::class,
             \Libxa\Providers\PulseServiceProvider::class,
         ];
 
