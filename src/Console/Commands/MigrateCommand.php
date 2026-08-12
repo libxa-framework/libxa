@@ -33,9 +33,17 @@ class MigrateCommand extends Command
         // Boot the application so database service providers are registered
         $this->app->boot();
 
-        $migrator = new Migrator();
-        
-        // Add default migration path
+        // The shared instance, not a new one. Package service providers
+        // register their migrations against it during boot by calling
+        // loadMigrationsFrom(); constructing a fresh Migrator here threw all
+        // of that away, so a package migration could never run no matter what
+        // the package did.
+        $migrator = $this->app->has('migrator')
+            ? $this->app->make('migrator')
+            : new Migrator();
+
+        // Still added explicitly: the binding does this too, but the fallback
+        // above does not, and addPath ignores a duplicate.
         $migrator->addPath($this->app->basePath('src/database/migrations'));
 
         // Scan modules for migrations

@@ -15,6 +15,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-08-12
+
+### Fixed
+
+- **A package could not ship a migration.** `ServiceProvider::loadMigrationsFrom()`
+  is guarded by `$this->app->has('migrator')`, and nothing ever bound
+  `migrator`, so the method silently did nothing. Every package that followed
+  the documented API shipped a migration that could never run, and said so
+  nowhere. `migrator` is now a shared binding, registered by the database
+  provider with the application path already added.
+- **`migrate` threw away what packages registered.** The command constructed
+  its own `Migrator`, so any path a service provider added during boot was
+  discarded before the command ever looked. It now resolves the shared
+  instance.
+- `Migrator::addPath()` ignores a path it already has. With several places
+  contributing paths, a duplicate meant running every migration in it twice.
+
 ## [0.10.1] - 2026-08-12
 
 Presentation only. No API, behaviour or dependency changed, so `^0.10.0`
@@ -160,7 +177,8 @@ picks this up without any action.
 Baseline for this changelog. Earlier releases are catalogued in the repository
 history and, for the July 2026 audit, in [CHANGES.md](CHANGES.md).
 
-[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/libxa-framework/libxa/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/libxa-framework/libxa/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/libxa-framework/libxa/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/libxa-framework/libxa/compare/v0.8.0...v0.9.0
