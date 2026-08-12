@@ -377,7 +377,7 @@
     </main>
 
     <footer>
-        &copy; {{ date('Y') }} LibxaFrame Project — Crafted for Developers.
+        &copy; {{ date('Y') }} LibxaFrame Project: Crafted for Developers.
     </footer>
 
     <script>

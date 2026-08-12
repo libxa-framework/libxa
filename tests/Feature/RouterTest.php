@@ -35,7 +35,7 @@ class RouterTest extends TestCase
 
     /**
      * prefix()/middleware()/name() pushed onto the group stack, and group()
-     * only ever popped one frame — so `Route::prefix('api')->group(...)` left
+     * only ever popped one frame, so `Route::prefix('api')->group(...)` left
      * "api" on the stack permanently and silently prefixed every route
      * registered afterwards, anywhere in the application.
      */

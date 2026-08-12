@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Libxa\Blade;
 
 /**
- * BladeStack — runtime support for @push / @stack directives.
+ * BladeStack: runtime support for @push / @stack directives.
  */
 class BladeStack
 {
@@ -30,7 +30,7 @@ class BladeStack
     /**
      * Clear all stacks. Called automatically by BladeEngine before each
      * *top-level* render() so that content pushed by one request can
-     * never leak into the response of another — critical under a
+     * never leak into the response of another: critical under a
      * persistent-process runtime (Workerman/reactive server) where this
      * class's static state would otherwise survive across requests.
      */

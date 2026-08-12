@@ -25,7 +25,7 @@ namespace Libxa\Blade;
  *
  * STABILITY GUARANTEES
  *   - Output buffers opened during a render (by @section/@component/etc.)
- *     are always fully unwound, even when the view throws — this matters
+ *     are always fully unwound, even when the view throws: this matters
  *     a lot on persistent-process runtimes (see src/Reactive/WsServer.php)
  *     where a leaked ob level would otherwise poison every later request
  *     handled by that worker.
@@ -122,7 +122,7 @@ class BladeEngine
      * `php libxa view:cache` to pre-warm every view before the first
      * request ever hits it.
      *
-     * Do NOT enable this in local development — template edits won't be
+     * Do NOT enable this in local development: template edits won't be
      * picked up until the cache is cleared (`view:clear`).
      */
     public function freeze(): void
@@ -204,7 +204,7 @@ class BladeEngine
         $cachePath = $this->getCachedPath($path);
 
         // Frozen/production mode: once the compiled file exists, trust it
-        // for the rest of the process lifetime — no filemtime() calls at
+        // for the rest of the process lifetime: no filemtime() calls at
         // all. Views are precompiled ahead of time via `view:cache`.
         if (! $this->checkTimestamps) {
             if (! is_file($cachePath)) {
@@ -217,7 +217,8 @@ class BladeEngine
         $cacheMTime  = is_file($cachePath) ? @filemtime($cachePath) : false;
 
         // Recompile if the cache is missing, or the source is newer than
-        // (or exactly as new as — same-second edits — the cache: we treat
+        // (or exactly as new as the cache, which happens with same-second
+        // edits). We compare with
         // ">=" rather than ">" to avoid the classic same-second staleness
         // bug on fast successive edits/deploys).
         if ($cacheMTime === false || $sourceMTime === false || $sourceMTime >= $cacheMTime) {
@@ -252,7 +253,7 @@ class BladeEngine
         // (so rename() stays on the same filesystem/volume) then rename
         // over the destination. rename() is atomic on POSIX filesystems,
         // so a concurrent reader either sees the old file or the fully
-        // written new one — never a partial write.
+        // written new one: never a partial write.
         $tmpPath = $cachePath . '.' . bin2hex(random_bytes(6)) . '.tmp';
 
         if (@file_put_contents($tmpPath, $compiled) === false) {
@@ -266,7 +267,7 @@ class BladeEngine
 
         // Push the freshly written file straight into OPcache's bytecode
         // cache. Without this, the file sits on disk until the *next*
-        // include() triggers PHP to parse+compile it — this just does
+        // include() triggers PHP to parse+compile it: this just does
         // that work once, up front, instead of on the request that's
         // already waiting on it.
         if (function_exists('opcache_compile_file') && function_exists('opcache_is_script_cached')) {
@@ -276,7 +277,7 @@ class BladeEngine
                 }
             } catch (\Throwable) {
                 // OPcache misconfiguration (e.g. opcache.restrict_api)
-                // should never break a render — it's a pure optimization.
+                // should never break a render: it's a pure optimization.
             }
         }
     }
@@ -292,7 +293,7 @@ class BladeEngine
         if ($this->renderDepth === 0) {
             // Fresh entry into the view layer (not a nested @include or
             // @extends call): guarantee no @push/@stack content survives
-            // from a previous, unrelated render — important on
+            // from a previous, unrelated render: important on
             // persistent-process runtimes where BladeStack is static.
             BladeStack::flush();
 
@@ -322,7 +323,7 @@ class BladeEngine
         // Merge globally shared data (BladeEngine::share() / SharedData) in
         // underneath the per-render $__data, so explicit render() data always
         // wins over a shared default. This is what makes View::share()-style
-        // globals actually reach the template — previously SharedData was
+        // globals actually reach the template: previously SharedData was
         // written to but never read back here, so anything relying on a
         // shared value (including the $errors bag below) was always null.
         $__data = array_replace(SharedData::all(), $__data);
@@ -440,7 +441,7 @@ class BladeEngine
     /**
      * Register a namespace. Can be called multiple times for the same
      * namespace to register additional fallback paths (checked in the
-     * order they were added) — matches Laravel's addNamespace() behavior
+     * order they were added): matches Laravel's addNamespace() behavior
      * where modules/packages can layer views on top of each other.
      */
     public function addNamespace(string $namespace, string|array $path): void

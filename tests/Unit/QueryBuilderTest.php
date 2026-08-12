@@ -179,7 +179,7 @@ class QueryBuilderTest extends TestCase
     }
 
     /**
-     * orderBy() interpolated both arguments verbatim — the single most common
+     * orderBy() interpolated both arguments verbatim: the single most common
      * SQL-injection sink in an app that sorts by a query parameter.
      */
     public function test_order_by_direction_is_restricted(): void

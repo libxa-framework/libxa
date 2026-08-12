@@ -19,7 +19,7 @@ class RouterServiceProvider extends ServiceProvider
 
         // WebSocket routing (WsRouter, ws.router, app/WebSockets scanning)
         // now lives in the optional libxa/socket package, not the core
-        // framework — see SocketServiceProvider in that package.
+        // framework: see SocketServiceProvider in that package.
     }
 
     public function boot(): void

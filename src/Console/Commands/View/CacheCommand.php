@@ -48,7 +48,7 @@ class CacheCommand extends Command
 
         $count = count($compiled);
         $output->writeln("<info>Blade views cached successfully:</info> {$count} file(s) compiled in {$elapsedMs}ms.");
-        $output->writeln('Remember to run <comment>view:cache</comment> again after every deploy — in production the ');
+        $output->writeln('Remember to run <comment>view:cache</comment> again after every deploy. In production the ');
         $output->writeln('engine trusts these compiled files without checking source timestamps.');
 
         return Command::SUCCESS;

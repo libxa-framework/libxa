@@ -10,7 +10,7 @@ use Libxa\Foundation\Application;
  * Module Loader
  *
  * Auto-discovers and boots modules found in src/app/Modules/.
- * All you need to do is drop a folder + Module.php — zero config.
+ * All you need to do is drop a folder + Module.php: zero config.
  *
  * Discovery rules:
  *  1. Scan the modules directory for subdirectories

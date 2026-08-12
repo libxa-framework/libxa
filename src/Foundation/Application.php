@@ -80,7 +80,7 @@ class Application extends Container
             $this->loadPackages();
             $this->loadModules();
 
-            // Iterate over a snapshot — bootProvider() may register further
+            // Iterate over a snapshot: bootProvider() may register further
             // providers, and mutating $this->providers mid-foreach is undefined.
             // Loop until the set stabilises so late arrivals still get booted.
             do {
@@ -166,7 +166,7 @@ class Application extends Container
 
         // A provider reachable from several discovery paths (core list,
         // config/app.php, package manifest, module manifest) used to be
-        // registered once per path — duplicating every route, event listener
+        // registered once per path: duplicating every route, event listener
         // and console command it declares.
         if (! $force && isset($this->providers[$class])) {
             return $this;
@@ -429,7 +429,7 @@ class Application extends Container
                 }
             }
 
-            // Unterminated quote — fall back to the raw remainder.
+            // Unterminated quote: fall back to the raw remainder.
             return substr($value, 1);
         }
 
@@ -446,8 +446,8 @@ class Application extends Container
      *
      * The previous implementation mixed ?? and ?: in one expression:
      *   static::$env[$key] ?? getenv($key) ?: $_ENV[$key] ?? $default
-     * which PHP groups as (a ?? b) ?: (c ?? d). Any *falsy* value — "0",
-     * "", "false" — therefore fell through to the default, so APP_DEBUG=0
+     * which PHP groups as (a ?? b) ?: (c ?? d). Any *falsy* value: "0",
+     * "", "false": therefore fell through to the default, so APP_DEBUG=0
      * behaved exactly like an unset APP_DEBUG. Each source is now checked
      * for presence rather than truthiness, and the common literals are
      * cast to real PHP types the way every mainstream framework does.

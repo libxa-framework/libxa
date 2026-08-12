@@ -227,7 +227,7 @@ class Blueprint
                 try {
                     $this->pdo->exec("ALTER TABLE `{$this->table}` ADD COLUMN $colSql");
                 } catch (\Throwable $e) {
-                    // Column may already exist — silently skip
+                    // Column may already exist: silently skip
                 }
             }
         } else {
@@ -239,7 +239,7 @@ class Blueprint
             try {
                 $this->pdo->exec($indexSql);
             } catch (\Throwable $e) {
-                // Index may already exist — silently skip
+                // Index may already exist: silently skip
             }
         }
     }

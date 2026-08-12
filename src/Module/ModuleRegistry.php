@@ -7,7 +7,7 @@ namespace Libxa\Module;
 use Libxa\Foundation\Application;
 
 /**
- * Module Registry — holds all loaded module instances.
+ * Module Registry: holds all loaded module instances.
  */
 class ModuleRegistry
 {

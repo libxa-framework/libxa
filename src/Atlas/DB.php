@@ -7,7 +7,7 @@ namespace Libxa\Atlas;
 use Libxa\Atlas\Connection\ConnectionPool;
 
 /**
- * DB Facade — static entry point for raw queries and Atlas ORM.
+ * DB Facade: static entry point for raw queries and Atlas ORM.
  *
  * Usage:
  *   DB::table('users')->where('active', true)->get();

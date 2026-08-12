@@ -1,7 +1,7 @@
 name: Release
 
 # Tags are created by a human (see docs/RELEASING.md). This workflow's job is
-# to *verify* the tag and publish the GitHub Release — never to create a tag.
+# to *verify* the tag and publish the GitHub Release: never to create a tag.
 # Packagist publishes independently via its push webhook.
 on:
   push:
@@ -40,7 +40,7 @@ jobs:
             exit 1
           fi
 
-      # A lightweight tag has no author, date or message — no provenance for
+      # A lightweight tag has no author, date or message: no provenance for
       # something that is about to be published permanently.
       #
       # Asked via the API rather than `git cat-file`: actions/checkout writes
@@ -64,9 +64,14 @@ jobs:
       - name: Tag must be on main
         run: |
           set -euo pipefail
-          git fetch origin main --depth=0
+          # No --depth: `--depth=0` is not "unlimited", it is invalid -
+          # `fatal: depth 0 is not a positive number`, and under
+          # `set -e` that aborted the whole step with exit 128, failing the
+          # v0.10.0 release. The checkout above already used fetch-depth: 0,
+          # so full history is present and a plain fetch is all that is needed.
+          git fetch origin main
           if ! git merge-base --is-ancestor "${GITHUB_REF_NAME}^{commit}" origin/main; then
-            echo "::error::${GITHUB_REF_NAME} is not an ancestor of main. Tags are cut from main only — see docs/BRANCHING.md"
+            echo "::error::${GITHUB_REF_NAME} is not an ancestor of main. Tags are cut from main only: see docs/BRANCHING.md"
             exit 1
           fi
 

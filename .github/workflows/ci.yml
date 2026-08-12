@@ -26,7 +26,7 @@ jobs:
       fail-fast: false
       matrix:
         # Every stable PHP the package claims to support. "php": "^8.3" means
-        # 8.3, 8.4 and 8.5 — so all three are proven here, not just the one
+        # 8.3, 8.4 and 8.5, so all three are proven here, not just the one
         # the maintainer happens to run.
         php: ["8.3", "8.4", "8.5"]
         dependencies: [highest]
@@ -157,7 +157,7 @@ jobs:
           echo "── Paths that must NOT ship ──"
           for excluded in tests/ .github/ phpunit.xml.dist docs/; do
             if grep -q "^${excluded}" /tmp/dist.txt; then
-              echo "::error::${excluded} is in the dist archive — add it to .gitattributes export-ignore"
+              echo "::error::${excluded} is in the dist archive. Add it to .gitattributes export-ignore"
               exit 1
             fi
           done

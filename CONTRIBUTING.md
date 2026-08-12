@@ -26,7 +26,7 @@ composer install
 composer test
 ```
 
-You should see a green suite. If you do not, that is a bug — please open an
+You should see a green suite. If you do not, that is a bug: please open an
 issue before changing anything.
 
 ### Working on the framework and the starter kit together
@@ -42,7 +42,7 @@ your-workspace/
 
 Then in `LibxaStack`, `composer install` junctions `vendor/libxa/framework`
 straight onto `../libxaframe`. The vendor directory *is* your framework working
-copy, so framework edits — including brand-new classes — take effect on the
+copy, so framework edits, including brand-new classes: take effect on the
 next request with no `composer update` and no `dump-autoload`.
 
 Run both suites before pushing:
@@ -56,7 +56,7 @@ Run both suites before pushing:
 
 ## Where to branch from
 
-**Always `develop`.** Never `main` — that is the published branch and is
+**Always `develop`.** Never `main`: that is the published branch and is
 protected.
 
 ```bash
@@ -76,7 +76,7 @@ git checkout -b fix/csrf-array-token
 | `perf/` | performance work |
 
 The single exception is a **hotfix** for a live production defect, which
-branches from `main`. Those are coordinated by maintainers — open an issue
+branches from `main`. Those are coordinated by maintainers: open an issue
 first rather than sending one unannounced.
 
 The full model is in [docs/BRANCHING.md](docs/BRANCHING.md).
@@ -109,8 +109,8 @@ A breaking change gets a `!` and a footer explaining the migration:
 feat(request)!: normalise header keys to upper snake case
 
 BREAKING CHANGE: Request::header() previously returned '' for any
-multi-word header name. Code that relied on that empty return — for
-example `if ($request->header('Content-Type') === '')` — must be
+multi-word header name. Code that relied on that empty return, for
+example `if ($request->header('Content-Type') === '')`: must be
 updated to check the real value.
 ```
 
@@ -123,7 +123,7 @@ is for **why**, since the diff already shows what.
 
 - **PSR-12**, with `declare(strict_types=1);` in every file.
 - **One class per file**, named after the file, in the PSR-4 namespace matching
-  its directory. This is enforced by `tests/Feature/AutoloadingTest.php` — it is
+  its directory. This is enforced by `tests/Feature/AutoloadingTest.php`: it is
   not a style preference. A class the autoloader cannot find is a fatal error at
   runtime, and a class declared in two files is a `Cannot redeclare class` fatal.
 - Type-hint everything: parameters, returns and properties.
@@ -144,11 +144,11 @@ Comment the **why**, not the what. A comment that restates the code is noise; a
 comment explaining a non-obvious constraint is worth its weight.
 
 ```php
-// Bad — the code already says this
+// Bad: the code already says this
 // Loop over the routes
 foreach ($this->routes as $route) {
 
-// Good — explains something the code cannot
+// Good: explains something the code cannot
 // Registration order matters: /posts/create must be checked before
 // /posts/{id}, or "create" is swallowed as an {id}.
 ```
@@ -170,7 +170,7 @@ tests/
 - Unit tests extend `PHPUnit\Framework\TestCase` directly.
 - Feature tests extend `Tests\TestCase`, which gives you a real booted
   `Application`, `makeRequest()`, and per-test isolation.
-- Database tests run against real in-memory SQLite. Do not mock PDO — the point
+- Database tests run against real in-memory SQLite. Do not mock PDO: the point
   is to catch SQL that does not parse.
 
 Name tests as sentences describing the behaviour:
@@ -184,7 +184,7 @@ maintainers need to know which assertions are load-bearing:
 
 ```php
 /**
- * "/users/{id?}" compiled to "/users/(?P<id>[^/]+)?" — the slash was
+ * "/users/{id?}" compiled to "/users/(?P<id>[^/]+)?": the slash was
  * mandatory, so the "no parameter" case could never match.
  */
 ```
@@ -206,7 +206,7 @@ composer test -- --testsuite Unit
    git rebase origin/develop
    ```
 2. Push and open the PR **against `develop`**.
-3. Fill in the template — particularly *how you verified it*. "Tests pass" is
+3. Fill in the template: particularly *how you verified it*. "Tests pass" is
    not verification; "added `test_x`, confirmed it fails on `develop`" is.
 4. Keep it focused. A PR that fixes a bug *and* reformats 40 files cannot be
    reviewed properly, and will be sent back.
@@ -231,9 +231,9 @@ maintainer awake and it is a hotfix.
 Open an issue with the **Bug report** template. The three things that determine
 whether it can be fixed:
 
-1. **Reproduction** — the smallest code that shows the problem.
+1. **Reproduction**: the smallest code that shows the problem.
 2. **Expected vs actual**, precisely. "It breaks" is not actionable.
-3. **Environment** — PHP version, framework version, OS, database driver.
+3. **Environment**: PHP version, framework version, OS, database driver.
 
 If you can write a failing test, attach it. That is the single most useful
 thing you can send.

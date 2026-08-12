@@ -13,7 +13,7 @@ use Throwable;
  * Important: fibers are *cooperative*, not pre-emptive. A task only overlaps
  * with the others at the points where it calls Fiber::suspend(). A task that
  * blocks (usleep, a synchronous PDO query, file_get_contents on a socket) runs
- * to completion before any other task advances — that is a property of fibers,
+ * to completion before any other task advances: that is a property of fibers,
  * not a bug here.
  *
  * Stability notes:
@@ -90,7 +90,7 @@ class Parallel
                 }
 
                 if (! $fiber->isSuspended()) {
-                    // Not terminated and not resumable — nothing this loop can
+                    // Not terminated and not resumable: nothing this loop can
                     // do with it. Dropping it is what stops the hang.
                     $errors[$key] = new \RuntimeException(
                         "Fiber [{$key}] is stuck in a non-resumable state."

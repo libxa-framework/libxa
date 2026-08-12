@@ -59,8 +59,8 @@ class SchemaTest extends TestCase
     /**
      * The SchemaBuilder was memoised in a static that nothing invalidated, so
      * it captured the first PDO it ever saw and kept using it forever. After a
-     * reconnect — a tenant switch, ConnectionPool::configure(), or simply the
-     * next test — every Schema:: call silently wrote DDL to the *previous*
+     * reconnect: a tenant switch, ConnectionPool::configure(), or simply the
+     * next test: every Schema:: call silently wrote DDL to the *previous*
      * database, and the table you asked for never appeared in the current one.
      */
     public function test_it_follows_the_connection_when_the_pool_is_rebound(): void

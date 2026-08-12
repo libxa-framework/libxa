@@ -25,7 +25,7 @@ class ParallelException extends RuntimeException
         ));
 
         parent::__construct(
-            count($errors) . ' parallel task(s) failed — ' . $summary,
+            count($errors) . ' parallel task(s) failed: ' . $summary,
             0,
             reset($errors) ?: null
         );

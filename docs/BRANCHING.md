@@ -3,8 +3,8 @@
 This is the single source of truth for how code moves from a developer's
 machine to Packagist. It applies to both repositories:
 
-- **`libxa-framework/libxa`** — the framework (a Composer *library*)
-- **`libxa-framework/LibxaStack`** — the starter kit (a Composer *project*)
+- **`libxa-framework/libxa`**: the framework (a Composer *library*)
+- **`libxa-framework/LibxaStack`**: the starter kit (a Composer *project*)
 
 ---
 
@@ -31,8 +31,8 @@ Every commit on `main` is, by definition, production. Treat it accordingly.
 
 | Branch | Cut from | Merges into | Lifetime | Protected |
 |---|---|---|---|---|
-| `main` | — | — | permanent | ✅ yes |
-| `develop` | `main` | — | permanent | ✅ yes |
+| `main` |: |: | permanent | ✅ yes |
+| `develop` | `main` |: | permanent | ✅ yes |
 | `feature/*` | `develop` | `develop` | days | no |
 | `fix/*` | `develop` | `develop` | hours–days | no |
 | `docs/*`, `chore/*`, `test/*`, `refactor/*` | `develop` | `develop` | hours–days | no |
@@ -50,7 +50,7 @@ Direct pushes are disabled. Force-pushes are disabled. History is permanent.
 
 The integration branch. This is where day-to-day work accumulates between
 releases and where CI runs the full matrix. `develop` may briefly be ahead of
-`main`; it must never be *behind* it — see [Back-merging](#back-merging).
+`main`; it must never be *behind* it: see [Back-merging](#back-merging).
 
 ### `feature/*`, `fix/*`, and friends
 
@@ -87,7 +87,7 @@ into `develop`.
 [Semantic Versioning 2.0.0](https://semver.org). Tags are prefixed with `v`.
 
 While the framework is pre-1.0 (`0.x.y`), Composer treats the **minor** number
-as the breaking-change boundary — `^0.8.0` allows `0.8.9` but not `0.9.0`. So:
+as the breaking-change boundary: `^0.8.0` allows `0.8.9` but not `0.9.0`. So:
 
 | Change | Pre-1.0 bump | Post-1.0 bump |
 |---|---|---|
@@ -102,7 +102,7 @@ that breaks a documented API needs a minor bump**, even if it looks small.
 
 ## Back-merging
 
-After **every** merge into `main` — release or hotfix — `main` must be merged
+After **every** merge into `main`, whether release or hotfix, `main` must be merged
 back into `develop` immediately:
 
 ```bash
@@ -141,7 +141,7 @@ the model above real rather than aspirational.
 - ✅ Require a pull request before merging
   - Required approvals: **1** (2 once the team is larger than three)
   - ✅ Dismiss stale approvals when new commits are pushed
-- ✅ Require status checks to pass — select every `ci.yml` matrix job
+- ✅ Require status checks to pass: select every `ci.yml` matrix job
   - ✅ Require branches to be up to date before merging
 - ✅ Require conversation resolution before merging
 - ✅ Require linear history
@@ -178,7 +178,7 @@ Both packages update through a **GitHub webhook**, configured once:
 
 After that, pushing a tag publishes a release and pushing to `main` refreshes
 `dev-main`. If a release does not appear within a minute, check
-*Settings → Webhooks → Recent Deliveries* for the response body — Packagist
+*Settings → Webhooks → Recent Deliveries* for the response body: Packagist
 reports the reason there.
 
 ---
@@ -188,7 +188,7 @@ reports the reason there.
 **Why not just commit to `main`?**
 Because `main` is published. A half-finished merge on `main` is a broken
 release for every consumer running `dev-main`, and one careless tag makes it
-permanent — Packagist releases cannot be meaningfully retracted.
+permanent: Packagist releases cannot be meaningfully retracted.
 
 **Can I tag from `develop`?**
 No. Tags come from `main` only, so the published history is always a strict

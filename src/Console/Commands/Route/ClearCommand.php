@@ -32,7 +32,7 @@ class ClearCommand extends Command
             @unlink($cacheFile);
             $output->writeln("<info>Route cache cleared:</info> {$cacheFile}");
         } else {
-            $output->writeln("<comment>No route cache file found — nothing to clear.</comment>");
+            $output->writeln("<comment>No route cache file found: nothing to clear.</comment>");
         }
 
         return Command::SUCCESS;

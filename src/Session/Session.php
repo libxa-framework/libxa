@@ -63,7 +63,7 @@ class Session
      * None of this was previously wired up: config/session.php shipped with
      * http_only, same_site, secure, lifetime and cookie-name settings that the
      * Session class never read, so every application ran on PHP's ini
-     * defaults — in particular no SameSite attribute (CSRF exposure) and,
+     * defaults: in particular no SameSite attribute (CSRF exposure) and,
      * depending on php.ini, no HttpOnly (session theft via XSS).
      */
     protected function applyCookieParams(): void
@@ -163,7 +163,7 @@ class Session
      * Destroy the session and issue a brand-new session ID.
      *
      * The old body called session_destroy() and then checked for
-     * PHP_SESSION_NONE — but session_status() stays ACTIVE for the rest of the
+     * PHP_SESSION_NONE, but session_status() stays ACTIVE for the rest of the
      * request after session_destroy(), so the restart never happened and, more
      * importantly, the *session ID was never rotated*. Logging out therefore
      * left the pre-logout identifier valid, which is textbook session fixation.
@@ -200,8 +200,8 @@ class Session
      * Promote flash data staged by the previous request into the readable
      * 'old' bucket, exactly once per request.
      *
-     * Several call sites used to invoke this — SessionServiceProvider::boot(),
-     * SessionMiddleware, and ShareErrorsMiddleware — so on a 'web' route it ran
+     * Several call sites used to invoke this: SessionServiceProvider::boot(),
+     * SessionMiddleware, and ShareErrorsMiddleware, so on a 'web' route it ran
      * two or three times. The second run moved the now-empty 'next' bucket over
      * 'old', deleting the messages before any view could read them: that is why
      * `return back()->with('error', ...)` appeared to do nothing.

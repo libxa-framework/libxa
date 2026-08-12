@@ -9,8 +9,8 @@ use Libxa\Router\Router;
 use Tests\TestCase;
 
 /**
- * Drives the real HTTP kernel — boot, global middleware, routing, dispatch,
- * exception handling — against a throwaway application skeleton.
+ * Drives the real HTTP kernel: boot, global middleware, routing, dispatch,
+ * exception handling: against a throwaway application skeleton.
  */
 class HttpKernelTest extends TestCase
 {
@@ -80,7 +80,7 @@ class HttpKernelTest extends TestCase
     }
 
     /**
-     * CSRF is global middleware, so it runs before the router — an unsafe
+     * CSRF is global middleware, so it runs before the router: an unsafe
      * verb without a token is rejected regardless of whether the route exists.
      */
     public function test_an_unsafe_verb_without_a_csrf_token_is_419(): void

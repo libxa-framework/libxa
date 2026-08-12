@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Libxa\Support;
 
 /**
- * Str — String helper class
+ * Str: String helper class
  */
 class Str
 {

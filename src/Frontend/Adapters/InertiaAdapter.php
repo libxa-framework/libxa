@@ -27,7 +27,7 @@ class InertiaAdapter implements FrontendAdapter
             'version'   => md5('Libxa-inertia-v1'),
         ];
 
-        // Inertia XHR request — return JSON
+        // Inertia XHR request: return JSON
         if ($request?->header('X-Inertia') === 'true') {
             header('Content-Type: application/json');
             header('X-Inertia: true');
@@ -35,7 +35,7 @@ class InertiaAdapter implements FrontendAdapter
             exit;
         }
 
-        // First visit — render full HTML layout
+        // First visit: render full HTML layout
         $pageJson = htmlspecialchars(json_encode($page, JSON_UNESCAPED_UNICODE), ENT_QUOTES);
 
         return Application::getInstance()->make('blade')->render('layouts.inertia', [

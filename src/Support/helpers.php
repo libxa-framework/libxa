@@ -226,7 +226,7 @@ if (! function_exists('old')) {
      * Previously submitted input, repopulated after a failed validation.
      *
      * The kernel flashes the whole input array under the 'old' key, but
-     * ->with('name', $value) writes individual keys — both spellings are
+     * ->with('name', $value) writes individual keys: both spellings are
      * checked so old() works no matter which path flashed the data. Calling
      * old() with no key returns the whole bag instead of always returning
      * the default, which is what the previous single-expression body did.
@@ -600,8 +600,8 @@ if (! function_exists('broadcast')) {
 if (! function_exists('ws')) {
     /**
      * Get the configured broadcast driver (LibxaBroadcaster, PusherBroadcaster,
-     * LogBroadcaster, or — if the optional libxa/socket package is
-     * installed and BROADCAST_DRIVER=ws — LibxaSocket\Broadcasting\WsBroadcast).
+     * LogBroadcaster, or: if the optional libxa/socket package is
+     * installed and BROADCAST_DRIVER=ws: LibxaSocket\Broadcasting\WsBroadcast).
      */
     function ws(): \Libxa\Broadcasting\Broadcaster
     {

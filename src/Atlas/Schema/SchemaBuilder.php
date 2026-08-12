@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Libxa\Atlas\Schema;
 
 /**
- * Schema Builder — entry point for DDL operations.
+ * Schema Builder: entry point for DDL operations.
  */
 class SchemaBuilder
 {

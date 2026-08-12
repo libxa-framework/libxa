@@ -1,7 +1,7 @@
-# Repository Setup — one-time checklist
+# Repository Setup: one-time checklist
 
 Everything in this document must be done **in the GitHub UI** by someone with
-admin rights. It cannot be committed, so it is easy to forget — and until it is
+admin rights. It cannot be committed, so it is easy to forget, and until it is
 done, the branch model in [BRANCHING.md](BRANCHING.md) is only a convention
 rather than something enforced.
 
@@ -40,12 +40,12 @@ Then **Settings → General → Default branch → `develop`**.
 | Restrict deletions | ✅ |
 | Block force pushes | ✅ |
 | Require linear history | ✅ |
-| Require a pull request | ✅ — 1 approval (2 once the team exceeds three people) |
+| Require a pull request | ✅: 1 approval (2 once the team exceeds three people) |
 | Dismiss stale approvals on new commits | ✅ |
 | Require conversation resolution | ✅ |
-| Require status checks | ✅ — see below |
+| Require status checks | ✅: see below |
 | Require branches to be up to date | ✅ |
-| Bypass list | **empty** — including admins |
+| Bypass list | **empty**, including admins |
 
 Required status checks (add each by name once CI has run at least once):
 
@@ -71,7 +71,7 @@ Same, with two relaxations:
 | Setting | Value |
 |---|---|
 | Target | `refs/tags/v*` |
-| Restrict creation | ✅ — release managers only |
+| Restrict creation | ✅: release managers only |
 | Restrict updates | ✅ |
 | Restrict deletions | ✅ |
 
@@ -109,7 +109,7 @@ webhook looks identical to a working one until release day.
 
 **Settings → Code security and analysis**, enable on both repositories:
 
-- ✅ Private vulnerability reporting — this is what `SECURITY.md` points people at
+- ✅ Private vulnerability reporting: this is what `SECURITY.md` points people at
 - ✅ Dependency graph
 - ✅ Dependabot alerts
 - ✅ Dependabot security updates
@@ -123,7 +123,7 @@ webhook looks identical to a working one until release day.
 **Settings → General → Features → Discussions** on the **framework** repository.
 
 The issue templates route "How do I …?" there, so questions stop competing with
-confirmed defects in the issue tracker. Leave it off for the starter kit — its
+confirmed defects in the issue tracker. Leave it off for the starter kit: its
 templates point at the framework's Discussions.
 
 ---
@@ -151,7 +151,7 @@ creates the first two; add the rest:
 |---|---|---|
 | `maintainers` | Admin | Change settings, manage releases |
 | `release-managers` | Write + tag creation | Cut releases (see [RELEASING.md](RELEASING.md)) |
-| `contributors` | Write | Push branches, open PRs — **not** merge to `main` |
+| `contributors` | Write | Push branches, open PRs: **not** merge to `main` |
 
 Everyone else contributes by fork and pull request, which needs no access at
 all.
@@ -171,7 +171,7 @@ Do not assume. Confirm each of these:
 - [ ] The private vulnerability reporting form opens from the Security tab
 
 The last one matters more than it appears: `SECURITY.md` tells researchers to
-use it, and if it is disabled they will fall back to opening a public issue —
+use it, and if it is disabled they will fall back to opening a public issue,
 which is a disclosure.
 
 ---

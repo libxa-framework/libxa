@@ -88,7 +88,7 @@ class EncrypterTest extends TestCase
 
     /**
      * `?payload[iv][]=x` used to reach base64_decode()/hash_equals() with an
-     * array and raise an uncatchable TypeError — an unauthenticated 500 on
+     * array and raise an uncatchable TypeError: an unauthenticated 500 on
      * any endpoint that decrypts user input.
      */
     public function test_array_payload_fields_are_rejected_without_a_type_error(): void

@@ -29,7 +29,7 @@ class ClearCommand extends Command
         $this->app->boot();
 
         if (! $this->app->has('cache')) {
-            $output->writeln("<comment>No cache service is registered — nothing to clear.</comment>");
+            $output->writeln("<comment>No cache service is registered: nothing to clear.</comment>");
             return Command::SUCCESS;
         }
 

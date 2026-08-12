@@ -1,6 +1,6 @@
 <!--
 Target branch: `develop` for everything except a coordinated hotfix or release.
-A PR opened against `main` from a feature branch will be closed — see
+A PR opened against `main` from a feature branch will be closed: see
 docs/BRANCHING.md.
 -->
 
@@ -15,7 +15,7 @@ docs/BRANCHING.md.
 ## How did you verify it?
 
 <!--
-"Tests pass" is not verification — CI already tells us that.
+"Tests pass" is not verification: CI already tells us that.
 
 Useful:
   "Added test_router_matches_optional_parameter; confirmed it fails on develop
@@ -27,7 +27,7 @@ Useful:
 
 - [ ] Bug fix (non-breaking)
 - [ ] New feature (non-breaking)
-- [ ] **Breaking change** — existing code must be updated
+- [ ] **Breaking change**: existing code must be updated
 - [ ] Documentation
 - [ ] Refactor / tooling / CI
 

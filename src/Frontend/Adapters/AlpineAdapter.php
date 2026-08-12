@@ -13,7 +13,7 @@ class AlpineAdapter implements FrontendAdapter
 
     public function render(string $component, array $props = []): string
     {
-        // Alpine is declarative — render a Blade view with x-data
+        // Alpine is declarative: render a Blade view with x-data
         return Application::getInstance()->make('blade')->render($component, $props);
     }
 

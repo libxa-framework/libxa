@@ -198,7 +198,7 @@ class Validator
 
     protected function validateInteger(string $f, mixed $v): void
     {
-        // filter_var() returns int(0) for "0", which is falsy — the old
+        // filter_var() returns int(0) for "0", which is falsy: the old
         // `! filter_var(...)` check therefore rejected a perfectly valid 0
         // (and, for the same reason, accepted nothing that evaluated falsy).
         if ($v !== null && filter_var($v, FILTER_VALIDATE_INT) === false) {
@@ -352,7 +352,7 @@ class Validator
      *
      * unique/exists used to swallow every Throwable, so a database that was
      * down, a mistyped table name, or a missing column all made `unique`
-     * silently *pass* — which is precisely the case where it must not, since
+     * silently *pass*, which is precisely the case where it must not, since
      * it lets duplicate accounts through. Only a genuinely absent DB
      * connection is tolerated now; real query failures surface.
      */
@@ -399,7 +399,7 @@ class Validator
     }
 
     /**
-     * Identifier quoting differs per driver — backticks are a MySQL/SQLite
+     * Identifier quoting differs per driver: backticks are a MySQL/SQLite
      * thing and are a syntax error on PostgreSQL, where these rules used to
      * throw and then be swallowed into a silent pass.
      */
@@ -423,7 +423,7 @@ class Validator
         $count = $this->countMatching($param, $f, $v, $error);
 
         if ($count === null) {
-            // No database at all (e.g. unit tests) — nothing to check.
+            // No database at all (e.g. unit tests): nothing to check.
             return;
         }
 
@@ -498,7 +498,7 @@ class Validator
     protected function validateFile(string $f, mixed $v): void
     {
         // Debug logger() calls used to run here on every single file
-        // validation — three log lines per upload in production, and a hard
+        // validation: three log lines per upload in production, and a hard
         // dependency on a booted container just to validate a form.
         if ($v instanceof \Libxa\Http\UploadedFile) {
             if (! $v->isValid()) {

@@ -41,7 +41,7 @@ abstract class Module extends ServiceProvider
 
     /**
      * Register services, bindings, config.
-     * Called before boot phase — keep it lightweight.
+     * Called before boot phase: keep it lightweight.
      */
     public function register(): void
     {

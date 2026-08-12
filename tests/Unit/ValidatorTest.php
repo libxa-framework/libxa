@@ -18,7 +18,7 @@ class ValidatorTest extends TestCase
     }
 
     /**
-     * filter_var('0', FILTER_VALIDATE_INT) is int(0) — falsy — so the old
+     * filter_var('0', FILTER_VALIDATE_INT) is int(0): falsy, so the old
      * `! filter_var(...)` check rejected a perfectly valid zero.
      */
     public function test_zero_is_a_valid_integer(): void

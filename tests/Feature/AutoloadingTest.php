@@ -11,12 +11,12 @@ use PHPUnit\Framework\TestCase;
 /**
  * Guards the framework's PSR-4 contract.
  *
- * Several files used to declare more than one class — Attributes/Route.php
+ * Several files used to declare more than one class: Attributes/Route.php
  * held six attribute classes, Support/Str.php hid StringableProxy,
  * Atlas/QueryBuilder.php hid RawExpression, and Container/ContextGraph.php
  * declared a *second* copy of ContextualBindingBuilder. Under PSR-4 the
  * autoloader can never find those extra classes, so referencing one produced
- * either "Class not found" or — for the duplicate — a hard
+ * either "Class not found" or, for the duplicate: a hard
  * "Cannot redeclare class" fatal as soon as both files happened to load.
  *
  * Both failure modes are silent until the exact code path runs in production,
@@ -52,7 +52,7 @@ class AutoloadingTest extends TestCase
 
             // Only top-level declarations count: anything inside a heredoc
             // (the make:* command stubs) is just a string. Names are collected
-            // fully qualified — Atlas\Attributes\BelongsTo and
+            // fully qualified: Atlas\Attributes\BelongsTo and
             // Atlas\Relations\BelongsTo are two different, legitimate classes.
             $collect = function (array $nodes, string $namespace) use (&$collect, &$found): void {
                 foreach ($nodes as $node) {

@@ -100,7 +100,7 @@ class BladeCompilerTest extends TestCase
     {
         // Regression test for the pre-existing bug where the LibxaStack
         // starter kit's layouts/app.blade.php used @hasSection, which the
-        // compiler never implemented — producing a fatal parse error in
+        // compiler never implemented: producing a fatal parse error in
         // the compiled cache file for the app's own default layout.
         $compiler = new Compiler();
         $compiled = $this->compileAndLint($compiler, "@hasSection('footer')shown@endif");

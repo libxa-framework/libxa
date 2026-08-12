@@ -69,7 +69,7 @@ class Request
             $post = is_array($decoded) ? $decoded : [];
         }
 
-        // Handle method spoofing. Only POST bodies may spoof — honouring
+        // Handle method spoofing. Only POST bodies may spoof: honouring
         // $_GET['_method'] let a plain <a href="/x?_method=DELETE"> link (or
         // an <img src>) reach a destructive route on a simple navigation.
         if ($method === 'POST') {
@@ -109,7 +109,7 @@ class Request
 
     /**
      * Determine whether the request uses a "safe" HTTP verb
-     * (one that should not mutate state — GET, HEAD, OPTIONS).
+     * (one that should not mutate state: GET, HEAD, OPTIONS).
      */
     public function isMethodSafe(): bool
     {
