@@ -17,7 +17,7 @@ use Libxa\Http\Response;
  *  - The parameters are typed int|string. The pipeline parses "throttle:60"
  *    into the string "60", and since both Pipeline.php and this file declare
  *    strict_types=1, passing that string to an `int` parameter raised an
- *    uncatchable TypeError — meaning the whole built-in 'api' middleware
+ *    uncatchable TypeError: meaning the whole built-in 'api' middleware
  *    group crashed on the first request.
  *  - The decay window is anchored on the first hit. Re-putting the counter
  *    with a fresh TTL on every request meant that under sustained traffic the

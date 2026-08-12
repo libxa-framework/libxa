@@ -15,7 +15,7 @@ use Libxa\Atlas\Relations\MorphTo;
 use Libxa\Foundation\Application;
 
 /**
- * Atlas ORM — Active Record Model
+ * Atlas ORM: Active Record Model
  *
  * Base class for all LibxaFrame models.
  * Supports PHP 8.3 attributes for zero-boilerplate feature declaration.
@@ -385,7 +385,7 @@ abstract class Model
     }
 
     /**
-     * AI Query Bridge — ask in English.
+     * AI Query Bridge: ask in English.
      */
     public static function ask(string $question): mixed
     {

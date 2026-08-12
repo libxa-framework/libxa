@@ -32,7 +32,7 @@ class ConnectionPool
         // Without this, calling configure() after something had already
         // resolved 'default' (which the boot order makes easy) left the pool
         // serving connections built from the *old* config for the rest of the
-        // process — the classic "why is it still hitting the dev database".
+        // process: the classic "why is it still hitting the dev database".
         $this->connections = [];
     }
 

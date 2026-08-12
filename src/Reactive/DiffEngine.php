@@ -44,7 +44,7 @@ class DiffEngine
             $oldContent = $oldElements[$id] ?? null;
 
             if ($oldContent === null) {
-                // New element added — try to append to parent
+                // New element added: try to append to parent
                 $ops[] = [
                     'op'     => 'append',
                     'target' => 'body',
@@ -152,7 +152,7 @@ class DiffEngine
             }
         }
 
-        // Self-closing element or parse failure — return tag itself
+        // Self-closing element or parse failure: return tag itself
         $end = strpos($html, '>', $start);
         return $end !== false ? substr($html, $start, $end - $start + 1) : null;
     }

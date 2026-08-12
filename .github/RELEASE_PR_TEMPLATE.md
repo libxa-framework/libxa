@@ -8,7 +8,7 @@ Runbook:    docs/RELEASING.md
 
 ## Version
 
-**vX.Y.Z** — <!-- patch | minor | major -->
+**vX.Y.Z**: <!-- patch | minor | major -->
 
 <!--
 Below 1.0, Composer treats the MINOR number as the compatibility boundary:
@@ -33,7 +33,7 @@ minor bump even if the diff looks small.
 
 ## Post-merge checklist
 
-Do these in order — see `docs/RELEASING.md`.
+Do these in order: see `docs/RELEASING.md`.
 
 - [ ] Annotated tag pushed **from `main`**: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
 - [ ] `release.yml` green

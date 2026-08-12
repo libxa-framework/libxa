@@ -198,7 +198,7 @@ class Migrator
      *
      * The class name used to be derived from the filename alone, and a
      * mismatch simply meant `class_exists()` returned false and the migration
-     * was skipped — silently. No warning, no error, exit code 0: you deployed,
+     * was skipped, silently. No warning, no error, exit code 0. You deployed,
      * the column was never added, and the first sign of trouble was a
      * "no such column" error in production. (The starter kit shipped exactly
      * such a file: add_refresh_token_to_tokens_table.php declaring

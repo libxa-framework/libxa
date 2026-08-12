@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Libxa\Atlas\AI;
 
 /**
- * Atlas AI Query Bridge — STUB
+ * Atlas AI Query Bridge: STUB
  *
  * Converts natural-language English questions into safe, read-only SQL
  * using the configured LLM provider (OpenAI, Anthropic, Gemini, etc.).

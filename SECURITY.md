@@ -9,7 +9,7 @@ supported line.
 | Version | Supported |
 |---|---|
 | 0.8.x | ✅ |
-| < 0.8 | ❌ — please upgrade |
+| < 0.8 | ❌: please upgrade |
 
 Once 1.0 ships, the two most recent minor releases will be supported and this
 table will say so.
@@ -22,18 +22,18 @@ running LibxaFrame at risk before a fix exists.
 
 Report privately, either way:
 
-- **GitHub Security Advisory** *(preferred)* — the
+- **GitHub Security Advisory** *(preferred)*: the
   [Report a vulnerability](https://github.com/libxa-framework/libxa/security/advisories/new)
   button on the Security tab. This gives us a private fork to develop and review
   the fix in.
-- **Email** — `libxa@vyloxi.com`, subject prefixed `[SECURITY]`.
+- **Email**: `libxa@vyloxi.com`, subject prefixed `[SECURITY]`.
 
 ### What to include
 
 The more of this you can provide, the faster it gets fixed:
 
 - The affected version(s) and component.
-- A description of the impact — what an attacker gains.
+- A description of the impact: what an attacker gains.
 - Steps to reproduce, ideally the smallest possible proof of concept.
 - Any mitigation you have found.
 
@@ -53,12 +53,12 @@ publish.
 
 We follow coordinated disclosure. Once a fix is released we publish a GitHub
 Security Advisory with a CVE where appropriate. Please give us the 30-day window
-above before disclosing publicly — and tell us if you are working to a different
+above before disclosing publicly, and tell us if you are working to a different
 deadline, so we can plan around it rather than be surprised by it.
 
 ## Scope
 
-In scope — this repository, and:
+In scope: this repository, and:
 
 - Authentication and authorisation bypass
 - SQL injection, XSS, CSRF, SSRF
@@ -71,7 +71,7 @@ In scope — this repository, and:
 Out of scope:
 
 - Vulnerabilities in **your** application code rather than the framework
-- Anything requiring `APP_DEBUG=true` in production — that is documented as a
+- Anything requiring `APP_DEBUG=true` in production: that is documented as a
   development-only setting, and the debug error page deliberately shows stack
   traces
 - Missing hardening headers that are the application's responsibility to set
@@ -88,7 +88,7 @@ Worth knowing when you assess a report:
 - `APP_KEY` must be a real 32-byte key. `php libxa key:generate` produces one;
   the encrypter refuses to start without a valid key.
 - `TRUSTED_PROXIES` is empty by default, so `X-Forwarded-For` is ignored. Only
-  set it if you actually run a reverse proxy, and list its addresses — a value
+  set it if you actually run a reverse proxy, and list its addresses: a value
   of `*` means anyone can spoof their client IP.
 - Session cookies default to `HttpOnly` and `SameSite=Lax`. Set
   `SESSION_SECURE_COOKIE=true` when serving over HTTPS.

@@ -14,7 +14,7 @@ use Libxa\Atlas\Connection\ConnectionPool;
  * Stability note: the builder used to be memoised in a static that nothing
  * ever invalidated. It captured whatever PDO the connection pool happened to
  * hold the first time Schema was touched, and kept using it for the rest of
- * the process — so after ConnectionPool::configure() (or a reconnect, or a
+ * the process, so after ConnectionPool::configure() (or a reconnect, or a
  * tenant switch, or the next test's database) every Schema:: call still wrote
  * DDL to the *previous* connection. The builder is now rebuilt whenever the
  * underlying PDO handle changes.

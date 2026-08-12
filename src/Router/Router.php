@@ -129,7 +129,7 @@ class Router
             'edit'    => [['GET'],          "/$prefix/{id}/edit", 'edit'],
             'show'    => [['GET'],          "/$prefix/{id}",      'show'],
             // Browsers can only spoof PUT via POST+_method, and API clients
-            // routinely send PATCH — accepting only PUT made half the
+            // routinely send PATCH: accepting only PUT made half the
             // conventional update requests 404.
             'update'  => [['PUT', 'PATCH'], "/$prefix/{id}",      'update'],
             'destroy' => [['DELETE'],       "/$prefix/{id}",      'destroy'],
@@ -177,7 +177,7 @@ class Router
      * Stage a prefix for the next group().
      *
      * These builders used to push straight onto $groupStack, which group()
-     * never popped — so `Route::prefix('api')->group(...)` permanently
+     * never popped, so `Route::prefix('api')->group(...)` permanently
      * prefixed every subsequent route in the application with /api.
      */
     public function prefix(string $prefix): static
@@ -493,18 +493,18 @@ class Router
     {
         $list = htmlspecialchars(implode(', ', $allowed), ENT_QUOTES, 'UTF-8');
 
-        return '<!DOCTYPE html><html><head><title>405 — Method Not Allowed</title>
+        return '<!DOCTYPE html><html><head><title>405 Method Not Allowed</title>
         <style>body{font-family:system-ui;background:#0f0f0f;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
         .box{text-align:center}h1{font-size:5rem;margin:0;color:#7ab8ff}p{color:#888}</style></head>
-        <body><div class="box"><h1>405</h1><p>Method not allowed — try: ' . $list . '</p></div></body></html>';
+        <body><div class="box"><h1>405</h1><p>Method not allowed. Allowed: ' . $list . '</p></div></body></html>';
     }
 
     protected function render404(): string
     {
-        return '<!DOCTYPE html><html><head><title>404 — Not Found</title>
+        return '<!DOCTYPE html><html><head><title>404 Not Found</title>
         <style>body{font-family:system-ui;background:#0f0f0f;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
         .box{text-align:center}h1{font-size:5rem;margin:0;color:#7ab8ff}p{color:#888}</style></head>
-        <body><div class="box"><h1>404</h1><p>Page not found — LibxaFrame</p></div></body></html>';
+        <body><div class="box"><h1>404</h1><p>Page not found | LibxaFrame</p></div></body></html>';
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -559,7 +559,7 @@ class Router
         }
 
         // Any remaining required placeholder means the caller forgot an
-        // argument — better a clear exception than a URL containing "{id}".
+        // argument: better a clear exception than a URL containing "{id}".
         if (preg_match('/\{(\w+)\}/', $uri, $missing)) {
             throw new \InvalidArgumentException(
                 "Missing required parameter [{$missing[1]}] for route [{$name}]."
@@ -589,7 +589,7 @@ class Router
     /**
      * Populate the route collection directly from a cached, pre-resolved
      * route definition array (as produced by `route:cache`), bypassing the
-     * normal file-based registration (route files, group prefixes, etc. —
+     * normal file-based registration (route files, group prefixes, etc.:
      * all of that is already baked into the cached definitions).
      *
      * @param array<int, array{methods: array, uri: string, action: mixed, name?: string, middleware?: array}> $cached

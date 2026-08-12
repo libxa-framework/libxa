@@ -8,7 +8,7 @@ declare(strict_types=1);
  * Uses token_get_all(..., TOKEN_PARSE), which runs the real PHP parser
  * in-process and throws ParseError on invalid syntax. That makes this a
  * genuine syntax check while staying roughly a hundred times faster than
- * spawning `php -l` per file — process creation dominates on Windows, where
+ * spawning `php -l` per file: process creation dominates on Windows, where
  * a 200-file tree took minutes.
  *
  * Usage: php tools/lint.php [dir ...]      (defaults to src and tests)

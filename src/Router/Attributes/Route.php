@@ -10,7 +10,7 @@ namespace Libxa\Router\Attributes;
  *
  * Note: WsRoute, Middleware, Prefix, ApiController, Gate and Throttle used to
  * live in this same file. PSR-4 maps one class per file, so those classes were
- * unreachable by the autoloader — PHP threw "Attribute class ... not found"
+ * unreachable by the autoloader: PHP threw "Attribute class ... not found"
  * the moment a controller actually used #[Prefix] or #[Middleware]. They now
  * each have their own file in this directory.
  */

@@ -16,8 +16,8 @@ contact_links:
   - name: 📦 Starter kit issues
     url: https://github.com/libxa-framework/LibxaStack/issues
     about: >
-      For problems with the application skeleton — scaffolding, default
-      config, the example controllers — rather than the framework itself.
+      For problems with the application skeleton: scaffolding, default
+      config, the example controllers: rather than the framework itself.
 
   - name: 📖 Contributing guide
     url: https://github.com/libxa-framework/libxa/blob/main/CONTRIBUTING.md

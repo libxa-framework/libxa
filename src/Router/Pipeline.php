@@ -196,7 +196,7 @@ class Pipeline
                 }
             }
         } catch (\Throwable) {
-            // Ignore — fall through to the raw class name
+            // Ignore: fall through to the raw class name
         }
 
         if (! class_exists($class)) {

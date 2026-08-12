@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Libxa\Support;
 
 /**
- * LibxaPulse — System Monitoring Metric Collector
+ * LibxaPulse: System Monitoring Metric Collector
  * 
  * Collects real-time system stats including memory, CPU, 
  * database performance, and cache efficiency.

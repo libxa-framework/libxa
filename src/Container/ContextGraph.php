@@ -11,9 +11,9 @@ namespace Libxa\Container;
  * and exposes it to the container for context-aware binding resolution.
  *
  * Note: this file also used to declare a second copy of
- * ContextualBindingBuilder, which already has its own file. Loading both — as
+ * ContextualBindingBuilder, which already has its own file. Loading both: as
  * happens the moment an application uses ->when() after the Application
- * constructor has instantiated a ContextGraph — is a hard fatal:
+ * constructor has instantiated a ContextGraph: is a hard fatal:
  * "Cannot redeclare class Libxa\Container\ContextualBindingBuilder".
  * The whenContext() method that copy carried has been merged into the real
  * ContextualBindingBuilder.
