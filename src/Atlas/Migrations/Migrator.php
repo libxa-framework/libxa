@@ -25,6 +25,13 @@ class Migrator
 
     public function addPath(string $path): void
     {
+        // Registered from several places now that packages contribute their
+        // own: the shared instance already carries the application path, and
+        // a command that adds it again would run every migration twice.
+        if (in_array($path, $this->paths, true)) {
+            return;
+        }
+
         $this->paths[] = $path;
     }
 
