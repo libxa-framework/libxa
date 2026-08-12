@@ -23,7 +23,7 @@ class ApplicationTest extends TestCase
 
     /**
      * env() was `a ?? b ?: c ?? d`, which PHP groups as (a ?? b) ?: (c ?? d).
-     * Any falsy value — "0", "" — therefore fell through to the default, so
+     * Any falsy value ("0", "") therefore fell through to the default, so
      * APP_DEBUG=0 behaved exactly like an unset APP_DEBUG.
      */
     public function test_a_falsy_env_value_is_not_replaced_by_the_default(): void

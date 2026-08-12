@@ -32,7 +32,7 @@ class ClearCommand extends Command
             @unlink($cacheFile);
             $output->writeln("<info>Configuration cache cleared:</info> {$cacheFile}");
         } else {
-            $output->writeln("<comment>No configuration cache file found — nothing to clear.</comment>");
+            $output->writeln("<comment>No configuration cache file found: nothing to clear.</comment>");
         }
 
         return Command::SUCCESS;

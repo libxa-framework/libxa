@@ -69,7 +69,7 @@ gh pr create --base main --head release/v0.9.0 \
 ```
 
 Get it reviewed. The reviewer's job is to read the changelog against the diff
-and confirm the version bump is right — particularly whether anything in there
+and confirm the version bump is right: particularly whether anything in there
 is breaking.
 
 ## 5. Merge and tag
@@ -84,7 +84,7 @@ git tag -a v0.9.0 -m "Release v0.9.0"
 git push origin v0.9.0
 ```
 
-Annotated tags (`-a`) only — `release.yml` rejects lightweight tags, because
+Annotated tags (`-a`) only: `release.yml` rejects lightweight tags, because
 they carry no author, date, or message.
 
 ## 6. Watch the release workflow
@@ -129,7 +129,7 @@ git push origin develop
 >
 > Squashing rewrites them into a brand-new commit with no link to the branch it
 > came from. Git then no longer sees `main` as an ancestor of `develop`, even
-> though the *content* is identical — and the next release branch conflicts on
+> though the *content* is identical, and the next release branch conflicts on
 > `CHANGELOG.md` with two "unrelated" edits.
 >
 > That is exactly what happened between v0.9.0 and v0.10.0: the back-merge was
@@ -139,7 +139,7 @@ git push origin develop
 > For this reason `main` deliberately does **not** enable *Require linear
 > history*. Linear history and git-flow are mutually exclusive: git-flow is
 > built on merge commits. Feature PRs into `develop` may still be squashed
-> freely — only `release/*` and `hotfix/*` merges must preserve ancestry.
+> freely: only `release/*` and `hotfix/*` merges must preserve ancestry.
 >
 > To check ancestry is intact at any time:
 >
@@ -223,7 +223,7 @@ Then mark the bad release as broken in `CHANGELOG.md` so the next person
 reading the history understands why the window was so short:
 
 ```markdown
-## [0.9.0] - 2026-08-15 — **BROKEN, use 0.9.1**
+## [0.9.0] - 2026-08-15: **BROKEN, use 0.9.1**
 ```
 
 The single exception is a tag pushed within a minute or two that Packagist has

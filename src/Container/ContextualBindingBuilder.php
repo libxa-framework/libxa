@@ -67,7 +67,7 @@ class ContextualBindingBuilder
 
     /**
      * give() used to register a binding for the empty-string abstract when
-     * needs() had been forgotten — a silent no-op that was very hard to spot.
+     * needs() had been forgotten: a silent no-op that was very hard to spot.
      */
     protected function assertNeedsWasCalled(): void
     {

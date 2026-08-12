@@ -176,7 +176,7 @@ class Container implements ContainerInterface
         $object = $this->build($concrete, $parameters);
 
         // Cache if singleton. Never cache when the caller supplied explicit
-        // constructor overrides — that object is not the canonical singleton.
+        // constructor overrides: that object is not the canonical singleton.
         if ($parameters === [] && $this->isSingleton($abstract)) {
             $this->instances[$abstract] = $object;
         }
@@ -186,7 +186,7 @@ class Container implements ContainerInterface
 
     protected function getConcrete(string $abstract): Closure|string
     {
-        // Contextual binding — check if the current build stack has a match
+        // Contextual binding: check if the current build stack has a match
         if (! empty($this->buildStack)) {
             $buildingClass = end($this->buildStack);
 
@@ -310,7 +310,7 @@ class Container implements ContainerInterface
             return $this->make($className);
         } catch (\Throwable $e) {
             // A circular dependency is a programming error, never something to
-            // paper over with a default value — it must surface to the developer.
+            // paper over with a default value: it must surface to the developer.
             if ($e instanceof \RuntimeException && str_contains($e->getMessage(), 'Circular dependency')) {
                 throw $e;
             }

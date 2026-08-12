@@ -62,7 +62,7 @@ class RouteCollection
 
     /**
      * HTTP methods accepted at a path by routes whose URI matches but whose
-     * verb does not. Empty when the path itself is unknown — that is a 404,
+     * verb does not. Empty when the path itself is unknown: that is a 404,
      * whereas a non-empty list means the correct answer is 405 plus an
      * Allow header, which the router previously reported as a 404.
      *

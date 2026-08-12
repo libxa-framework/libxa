@@ -189,7 +189,7 @@ class QueryBuilder
      *
      * Both arguments used to be interpolated into the SQL verbatim, so a
      * controller doing orderBy($request->input('sort'), $request->input('dir'))
-     * — the single most common way this method gets called — was a direct SQL
+     * (the single most common way this method gets called) was a direct SQL
      * injection. The column is now quoted as an identifier and the direction
      * is restricted to ASC/DESC.
      */
@@ -277,7 +277,7 @@ class QueryBuilder
 
     /**
      * Add a JOIN clause. Identifiers are quoted and both the join type and
-     * the comparison operator come from whitelists — everything here was
+     * the comparison operator come from whitelists: everything here was
      * previously interpolated straight into the SQL string.
      */
     public function join(string $table, string $first, string $operator, string $second, string $type = 'INNER'): static
@@ -619,7 +619,7 @@ class QueryBuilder
         //
         // This used to be pushed into $conditions while $first stayed true,
         // so the first user-supplied where was emitted with *no* boolean
-        // operator: "WHERE `deleted_at` IS NULL `id` = ?" — a syntax error on
+        // operator: "WHERE `deleted_at` IS NULL `id` = ?". A syntax error on
         // every driver. Any soft-deleting model with a where clause was
         // therefore completely unqueryable.
         if ($this->softDeletes && ! $this->withTrashed) {
@@ -698,7 +698,7 @@ class QueryBuilder
 
     protected function eagerLoad(array $models): void
     {
-        // Basic eager loading — for each relation name, load all related records
+        // Basic eager loading, for each relation name, load all related records
         // with a single IN() query, then map them back to their parent models.
         // Full implementation would parse dot-notation (orders.products).
         foreach ($this->withs as $relation) {

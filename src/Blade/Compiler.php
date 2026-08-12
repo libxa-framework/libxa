@@ -22,7 +22,7 @@ namespace Libxa\Blade;
  *  - $__sections is always initialized, so @section()/@endsection works
  *    even in a view that doesn't @extends anything.
  *  - @push / @endpush / @prepend are now actually compiled (previously
- *    documented but never wired up — they rendered as literal text).
+ *    documented but never wired up: they rendered as literal text).
  */
 class Compiler
 {
@@ -137,7 +137,7 @@ class Compiler
 
             if ($i >= $len || $source[$i] !== '(') {
                 if ($requireParens) {
-                    // Not actually a call — leave the literal text untouched.
+                    // Not actually a call: leave the literal text untouched.
                     $out .= substr($source, $pos, $after - $pos);
                     $cursor = $after;
                     continue;
@@ -150,7 +150,7 @@ class Compiler
 
             $close = $this->findMatchingParen($source, $i);
             if ($close === null) {
-                // Unbalanced parens — bail out safely rather than
+                // Unbalanced parens: bail out safely rather than
                 // corrupting the rest of the file. Leave as literal text.
                 $out .= substr($source, $pos, $after - $pos);
                 $cursor = $after;
@@ -342,7 +342,7 @@ class Compiler
             return "<?php \$__layout = ({$args}); \$__sections = \$__sections ?? []; ob_start(); ?>";
         });
 
-        // @section(...) — either "@section('name', 'inline')" (assignment)
+        // @section(...): either "@section('name', 'inline')" (assignment)
         // or "@section('name')" ... "@endsection" (buffered, stack-based
         // so nested sections don't clobber $__currentSection).
         $source = $this->compileDirective($source, 'section', function (?string $args): string {
@@ -381,7 +381,7 @@ class Compiler
         // @hasSection('name') / @sectionMissing('name')
         // NOTE: this was previously undefined even though the LibxaStack
         // starter kit's own default layout (layouts/app.blade.php) uses
-        // @hasSection — meaning that layout had a fatal PHP parse error
+        // @hasSection: meaning that layout had a fatal PHP parse error
         // in its compiled cache file from day one. See CHANGES.md.
         $source = $this->compileDirective($source, 'hasSection', function (?string $args): string {
             $parts = $this->splitArgs((string) $args);
@@ -399,7 +399,7 @@ class Compiler
         });
         $source = preg_replace('/@endSectionMissing\b/i', "<?php endif; ?>", $source);
 
-        // @parent — not supported by this lightweight engine; strip it
+        // @parent, not supported by this lightweight engine; strip it
         // rather than leaving literal "@parent" text in the output.
         $source = str_replace('@parent', '', $source);
 
@@ -478,7 +478,7 @@ PHP;
         if ($literal !== null) {
             return "'" . addslashes($literal) . "'";
         }
-        // A dynamic expression (variable/function) — wrap defensively.
+        // A dynamic expression (variable/function): wrap defensively.
         return "({$rawArg})";
     }
 

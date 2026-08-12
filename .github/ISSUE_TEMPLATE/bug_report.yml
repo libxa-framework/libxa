@@ -7,7 +7,7 @@ body:
       value: |
         Thanks for reporting.
 
-        **Security issue?** Stop — do not file it here. Follow
+        **Security issue?** Stop: do not file it here. Follow
         [SECURITY.md](https://github.com/libxa-framework/libxa/blob/main/SECURITY.md)
         for private disclosure. A public report puts every LibxaFrame
         application at risk before a fix exists.
@@ -73,7 +73,7 @@ body:
       label: Reproduction
       description: >
         The smallest code that shows the problem. A failing test is the single
-        most useful thing you can send — it turns a report into a fix.
+        most useful thing you can send: it turns a report into a fix.
       render: php
       placeholder: |
         $router = new Router($app);

@@ -22,7 +22,7 @@ class ViteManifest
         $app = Application::getInstance();
         $env = $app?->env('APP_ENV', 'local');
 
-        // In local dev — use Vite dev server
+        // In local dev: use Vite dev server
         if ($env === 'local' || $env === 'development') {
             return static::devTags((array) $entries);
         }
@@ -52,7 +52,7 @@ class ViteManifest
         $tags     = '';
 
         // A JS entry lists the CSS it imports, and that same file is usually
-        // *also* passed to @vite() explicitly — the conventional
+        // *also* passed to @vite() explicitly: the conventional
         // @vite(['app.js', 'app.css']) emitted the stylesheet link twice.
         $emitted = [];
 

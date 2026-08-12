@@ -772,7 +772,7 @@ Built with ❤️ using PHP 8.3+
 
 ---|---|
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Local setup, branch rules, commit convention, test policy |
-| [docs/BRANCHING.md](docs/BRANCHING.md) | The branch model — `main` is what Packagist publishes |
+| [docs/BRANCHING.md](docs/BRANCHING.md) | The branch model: `main` is what Packagist publishes |
 | [docs/RELEASING.md](docs/RELEASING.md) | Release and hotfix runbook |
 | [docs/REPOSITORY_SETUP.md](docs/REPOSITORY_SETUP.md) | One-time GitHub settings: branch protection, tag rules, Packagist webhook |
 | [SECURITY.md](SECURITY.md) | Private vulnerability disclosure and supported versions |
@@ -800,7 +800,7 @@ complete picture in one place.
 | [libxa-framework/LibxaStack](https://github.com/libxa-framework/LibxaStack) | `libxa/libxa` | project | The starter kit. What `composer create-project` produces. |
 
 They version **independently**. A framework release does not require a starter
-kit release — but a framework *minor* release usually gets one, so new projects
+kit release, but a framework *minor* release usually gets one, so new projects
 receive the new version.
 
 ```
@@ -836,11 +836,11 @@ reviewed `release/*` or `hotfix/*` pull request.**
 
 | Branch | From | Into | Lifetime | Protected |
 |---|---|---|---|---|
-| `main` | — | — | permanent | ✅ |
-| `develop` | `main` | — | permanent | ✅ |
-| `feature/*` `fix/*` `docs/*` `test/*` `refactor/*` `chore/*` `perf/*` | `develop` | `develop` | hours–days | — |
-| `release/vX.Y.Z` | `develop` | `main` **and** `develop` | days | — |
-| `hotfix/vX.Y.Z` | `main` | `main` **and** `develop` | hours | — |
+| `main` |: |: | permanent | ✅ |
+| `develop` | `main` |: | permanent | ✅ |
+| `feature/*` `fix/*` `docs/*` `test/*` `refactor/*` `chore/*` `perf/*` | `develop` | `develop` | hours–days |: |
+| `release/vX.Y.Z` | `develop` | `main` **and** `develop` | days |: |
+| `hotfix/vX.Y.Z` | `main` | `main` **and** `develop` | hours |: |
 
 `develop` is the default branch on GitHub, so new pull requests target it
 automatically.
@@ -889,7 +889,7 @@ your-workspace/
 `vendor/libxa/framework` onto `../libxaframe`. The vendor directory *is* your
 framework working copy, so:
 
-- framework edits take effect on the next request — no `composer update`, no
+- framework edits take effect on the next request: no `composer update`, no
   `dump-autoload`, not even for brand-new classes (PSR-4 resolves them live);
 - the two can never drift apart. They previously did, in both directions, and
   framework fixes silently had no effect on the app.
@@ -899,7 +899,7 @@ framework working copy, so:
 (cd LibxaStack  && composer check)
 ```
 
-When no sibling checkout exists — CI, a normal install — the path repository's
+When no sibling checkout exists (CI, or a normal install) the path repository's
 glob matches nothing and `libxa/framework` resolves from Packagist instead.
 
 ## What CI enforces
@@ -925,7 +925,7 @@ Tags are created **by a human**; CI verifies rather than creates them. Full
 runbook: [docs/RELEASING.md](docs/RELEASING.md).
 
 ```bash
-# 1. Cut the release branch — develop is now open for the version after next
+# 1. Cut the release branch: develop is now open for the version after next
 git checkout develop && git pull
 git checkout -b release/v0.9.0
 
@@ -936,7 +936,7 @@ composer check
 
 # 4. PR into main, get it reviewed, merge
 
-# 5. Tag on main — annotated, never lightweight
+# 5. Tag on main: annotated, never lightweight
 git checkout main && git pull
 git tag -a v0.9.0 -m "Release v0.9.0"
 git push origin v0.9.0
@@ -948,14 +948,14 @@ git push origin develop
 ```
 
 `release.yml` refuses to publish a tag that is not annotated, not SemVer, not
-an ancestor of `main`, or not documented in `CHANGELOG.md` — and re-runs the
+an ancestor of `main`, or not documented in `CHANGELOG.md`, and re-runs the
 full suite at the tagged commit before creating the GitHub Release. Packagist
 publishes independently via its push webhook.
 
 ### Version numbers
 
 [SemVer](https://semver.org), prefixed `v`. **Below 1.0, Composer treats the
-minor number as the compatibility boundary** — `^0.8.0` allows `0.8.9` but not
+minor number as the compatibility boundary**: `^0.8.0` allows `0.8.9` but not
 `0.9.0`:
 
 | Change | Pre-1.0 | Post-1.0 |
@@ -980,7 +980,7 @@ gh pr create --base main
 # merge → tag on main → back-merge into develop
 ```
 
-A hotfix without a regression test is not finished — the reason it is urgent is
+A hotfix without a regression test is not finished: the reason it is urgent is
 that nothing caught it.
 
 ## Reference

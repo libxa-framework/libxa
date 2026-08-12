@@ -13,7 +13,7 @@ use PHPUnit\Framework\TestCase as BaseTestCase;
  *
  * Boots a *real* Application against a throwaway application skeleton in the
  * system temp directory. The previous tests mocked Application and tried to
- * stub Application::env(), which is static and therefore cannot be stubbed —
+ * stub Application::env(), which is static and therefore cannot be stubbed:
  * every one of those tests failed with "Static method env cannot be invoked on
  * mock object". Running against the real container also means these tests
  * actually exercise service-provider wiring, which is where most of the

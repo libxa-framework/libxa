@@ -8,7 +8,7 @@ use Libxa\Session\Session;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Session behaviour under CLI (where PHP sessions are inert) — the flash-data
+ * Session behaviour under CLI (where PHP sessions are inert): the flash-data
  * lifecycle is pure $_SESSION manipulation, so it is fully testable here.
  */
 class SessionTest extends TestCase
@@ -65,7 +65,7 @@ class SessionTest extends TestCase
      * ageFlashData() was called from SessionServiceProvider::boot(),
      * SessionMiddleware *and* ShareErrorsMiddleware. The second call moved the
      * now-empty 'next' bucket over 'old', wiping the message before any view
-     * could read it — the reason `back()->with('error', ...)` did nothing.
+     * could read it: the reason `back()->with('error', ...)` did nothing.
      */
     public function test_ageing_twice_in_one_request_does_not_wipe_the_flash_bag(): void
     {

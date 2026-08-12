@@ -18,7 +18,7 @@ class BladeServiceProvider extends ServiceProvider
             $blade = new BladeEngine($viewsPath, $cachePath);
 
             // In production, skip the per-render filemtime() staleness
-            // check entirely once a compiled view exists — templates don't
+            // check entirely once a compiled view exists: templates don't
             // change without a deploy, and a deploy should run
             // `php libxa view:cache` (which also clears stale entries),
             // so trusting the cache outright is safe and meaningfully

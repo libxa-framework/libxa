@@ -32,7 +32,7 @@ class EnvCommand extends Command
         $envFile = $this->app->basePath('.env');
         $output->writeln(is_file($envFile)
             ? "<comment>.env file:</comment> {$envFile}"
-            : "<comment>No .env file found</comment> — using defaults / environment variables.");
+            : "<comment>No .env file found</comment>. Using defaults / environment variables.");
 
         return Command::SUCCESS;
     }

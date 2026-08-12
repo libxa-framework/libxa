@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Libxa\Events;
 
 /**
- * Base Event class — all events can optionally extend this.
+ * Base Event class: all events can optionally extend this.
  */
 abstract class Event
 {

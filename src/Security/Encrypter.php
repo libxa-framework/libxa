@@ -22,7 +22,7 @@ use RuntimeException;
  *    turns "attacker can read your session" into remote code execution.
  *  - A payload whose iv/value/mac fields are arrays (trivially sent by an
  *    attacker as ?payload[iv][]=x) used to reach base64_decode()/hash_equals()
- *    with an array argument and crash with a TypeError — an unauthenticated
+ *    with an array argument and crash with a TypeError: an unauthenticated
  *    500 on any endpoint that decrypts user input.
  */
 class Encrypter

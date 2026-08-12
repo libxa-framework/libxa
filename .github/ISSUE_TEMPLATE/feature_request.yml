@@ -41,8 +41,8 @@ body:
     attributes:
       label: Would this break existing code?
       options:
-        - "No — purely additive"
-        - "Yes — existing behaviour changes"
+        - "No: purely additive"
+        - "Yes: existing behaviour changes"
         - "Not sure"
     validations:
       required: true

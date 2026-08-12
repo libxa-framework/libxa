@@ -8,7 +8,7 @@ use Libxa\Atlas\Schema\SchemaBuilder;
 use Libxa\Atlas\Connection\ConnectionPool;
 
 /**
- * Base Migration Class — all migration files extend this.
+ * Base Migration Class: all migration files extend this.
  */
 abstract class Migration
 {

@@ -66,8 +66,8 @@ class Route
      *
      * Accepts a class name, an alias, a group name, an already-constructed
      * middleware object, or a closure. The signature used to be
-     * `string|array`, so passing a closure — which the pipeline happily
-     * executes — raised a TypeError here first. array_unique() also had to
+     * `string|array`, so passing a closure, which the pipeline happily
+     * executes: raised a TypeError here first. array_unique() also had to
      * go: it stringifies its input, which is a fatal for a Closure.
      */
     public function middleware(string|array|object $middleware): static
@@ -175,7 +175,7 @@ class Route
         $parameters = [];
 
         foreach ($matches as $key => $value) {
-            // An unmatched optional group yields '' — treat it as absent so
+            // An unmatched optional group yields '': treat it as absent so
             // the controller's default parameter value takes over.
             if (is_string($key) && $value !== '') {
                 $parameters[$key] = $value;

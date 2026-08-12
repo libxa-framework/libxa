@@ -31,7 +31,7 @@ class HttpKernel
     ];
 
     /**
-     * Middleware groups — applied when a route uses them.
+     * Middleware groups: applied when a route uses them.
      */
     protected array $middlewareGroups = [
         // SessionMiddleware is already in the global stack above; listing it
@@ -74,7 +74,7 @@ class HttpKernel
             try {
                 $response = $this->handleException($e, $request);
             } catch (\Throwable $fatal) {
-                // The handler itself can fail — back() needs a session,
+                // The handler itself can fail: back() needs a session,
                 // renderDebugException needs a working Response, a custom
                 // handler may throw. Without this net the process dies with a
                 // blank 500 and the *original* exception is lost entirely.
@@ -191,7 +191,7 @@ class HttpKernel
         }
 
         // Unexpected exceptions are always worth a log line, in every
-        // environment — production previously swallowed them silently.
+        // environment: production previously swallowed them silently.
         $this->reportException($e);
 
         if (! $this->isDebug()) {
@@ -233,7 +233,7 @@ class HttpKernel
     protected function renderDebugException(\Throwable $e): Response
     {
         // Every interpolated value is attacker-influenced (an exception
-        // message routinely contains user input), so all of them are escaped —
+        // message routinely contains user input), so all of them are escaped:
         // $file/$class/$line used to be injected into the HTML raw.
         $class   = htmlspecialchars(get_class($e), ENT_QUOTES, 'UTF-8');
         $message = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
@@ -244,7 +244,7 @@ class HttpKernel
         $html = <<<HTML
         <!DOCTYPE html>
         <html>
-        <head><meta charset="utf-8"><title>LibxaFrame — Error</title>
+        <head><meta charset="utf-8"><title>Error | LibxaFrame</title>
         <style>
             body { font-family: system-ui; background: #0f0f0f; color: #e0e0e0; margin: 0; padding: 2rem; }
             .box { background: #1a1a2e; border: 1px solid #c0392b; border-radius: 8px; padding: 2rem; max-width: 900px; margin: 0 auto; }
@@ -288,7 +288,7 @@ class HttpKernel
         $html = <<<HTML
         <!DOCTYPE html>
         <html>
-        <head><meta charset="utf-8"><title>$code — LibxaFrame</title>
+        <head><meta charset="utf-8"><title>$code | LibxaFrame</title>
         <style>
             body { font-family: system-ui; background: #0a0a0c; color: #fff; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; text-align: center; }
             .box { padding: 3rem; background: #121214; border: 1px solid #2a2a2e; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
@@ -311,7 +311,7 @@ class HttpKernel
 
     protected function renderProductionError(): string
     {
-        return '<!DOCTYPE html><html><head><title>Server Error</title></head><body style="background:#0a0a0c;color:#fff;text-align:center;padding:50px;font-family:sans-serif;"><h1>500 — Server Error</h1><p>Something went wrong. Please try again later.</p></body></html>';
+        return '<!DOCTYPE html><html><head><title>Server Error</title></head><body style="background:#0a0a0c;color:#fff;text-align:center;padding:50px;font-family:sans-serif;"><h1>500 Server Error</h1><p>Something went wrong. Please try again later.</p></body></html>';
     }
 
     /**

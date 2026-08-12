@@ -33,7 +33,7 @@ class RouteTest extends TestCase
     }
 
     /**
-     * "/users/{id?}" compiled to "/users/(?P<id>[^/]+)?" — the slash was
+     * "/users/{id?}" compiled to "/users/(?P<id>[^/]+)?": the slash was
      * mandatory, so the "no parameter" case could never match.
      */
     public function test_optional_parameter_matches_with_and_without_the_segment(): void
