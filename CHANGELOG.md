@@ -15,6 +15,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-08-12
+
+### Added
+
+- **`Blueprint::unsignedBigInteger()`.** `id()` produces an auto-incrementing
+  big integer, so a foreign key referencing one has to be an unsigned big
+  integer to match. `bigInteger()` is signed and `unsignedInteger()` is too
+  narrow, so there was no correct type for the most common foreign key there
+  is.
+- **`Blueprint::ipAddress()`.** `VARCHAR(45)`, which is the longest an IPv6
+  address gets once it carries an embedded IPv4 one. The alternative people
+  reach for is `string(15)`, which holds every IPv4 address and silently
+  truncates every IPv6 one.
+- **`Blueprint::primary()`**, for a primary key over one or more columns,
+  emitted inside `CREATE TABLE`. A pivot table is the reason: the pairing is
+  the identity, and without this every pivot needs a surrogate id it has no
+  use for. SQLite cannot add a primary key with `ALTER TABLE` at all, so it
+  has to be part of the table definition.
+
+All three were found by building an admin panel against the framework, whose
+migrations could not run without them.
+
 ## [0.10.2] - 2026-08-12
 
 ### Fixed
@@ -177,7 +199,8 @@ picks this up without any action.
 Baseline for this changelog. Earlier releases are catalogued in the repository
 history and, for the July 2026 audit, in [CHANGES.md](CHANGES.md).
 
-[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.10.3...HEAD
+[0.10.3]: https://github.com/libxa-framework/libxa/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/libxa-framework/libxa/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/libxa-framework/libxa/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/libxa-framework/libxa/compare/v0.9.0...v0.10.0
