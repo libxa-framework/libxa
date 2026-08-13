@@ -550,6 +550,17 @@ class Application extends Container
         $this->instance(Application::class, $this);
         $this->instance(Container::class, $this);
         $this->instance(ContextGraph::class, new ContextGraph($this->context));
+
+        // The kernels are shared, or their middleware stacks are fiction.
+        //
+        // HttpKernel::pushMiddleware() exists so packages and providers can
+        // add global middleware, but resolving an unbound class builds a new
+        // object every time. A provider that pushed middleware in boot() was
+        // therefore mutating a second kernel that nothing ever ran a request
+        // through, and the middleware simply never fired — with no error, and
+        // nothing in the stack to suggest where it went.
+        $this->singleton(HttpKernel::class);
+        $this->singleton(ConsoleKernel::class);
     }
 
     protected function registerCoreProviders(): void

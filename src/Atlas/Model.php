@@ -366,9 +366,25 @@ abstract class Model
         return static::query()->find($id) ?? throw new \RuntimeException("Model not found: $id");
     }
 
-    public static function where(string $column, mixed $operatorOrValue, mixed $value = null): QueryBuilder
+    /**
+     * Start a query with a where clause.
+     *
+     * The forwarding has to preserve how many arguments the caller gave.
+     * `QueryBuilder::where()` decides whether the second argument is an
+     * operator or a value by counting them, and this passed three
+     * unconditionally, so `Model::where('email', $address)` was read as
+     * `WHERE email <$address> NULL` and threw:
+     *
+     *     InvalidArgumentException: Unsupported SQL operator [ada@example.com].
+     *
+     * That is the most common query anyone writes against a model, and it
+     * could not work at all.
+     */
+    public static function where(string $column, mixed $operatorOrValue = null, mixed $value = null): QueryBuilder
     {
-        return static::query()->where($column, $operatorOrValue, $value);
+        return func_num_args() >= 3
+            ? static::query()->where($column, $operatorOrValue, $value)
+            : static::query()->where($column, $operatorOrValue);
     }
 
     public static function create(array $attributes): static
