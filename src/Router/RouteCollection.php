@@ -14,6 +14,21 @@ class RouteCollection
     /** @var Route[] */
     protected array $routes = [];
 
+    /**
+     * Routes considered only after every ordinary route has been tried.
+     *
+     * Kept in their own list rather than at the end of $routes because
+     * "registered last" and "matched last" are not the same thing: a package's
+     * routes are registered while its provider boots, which happens after the
+     * application's own route file has run. A catch-all written at the bottom
+     * of routes/web.php would therefore still shadow every route a package
+     * adds, and the package's pages 404 for a reason nothing in either file
+     * makes visible.
+     *
+     * @var Route[]
+     */
+    protected array $fallbacks = [];
+
     /** @var array<string, Route> name => route */
     protected array $named = [];
 
@@ -30,6 +45,15 @@ class RouteCollection
     }
 
     /**
+     * Add a route that only matches once nothing else has.
+     */
+    public function addFallback(Route $route): void
+    {
+        $this->fallbacks[]    = $route;
+        $this->nameIndexStale = true;
+    }
+
+    /**
      * Match a request to a route.
      *
      * The matched parameters are written onto the Request (not just onto the
@@ -40,21 +64,25 @@ class RouteCollection
     {
         $path = $request->path();
 
-        foreach ($this->routes as $route) {
-            if (! $route->matchesMethod($request->method())) {
-                continue;
+        // Ordinary routes first, in registration order; fallbacks only once
+        // none of them matched.
+        foreach ([$this->routes, $this->fallbacks] as $candidates) {
+            foreach ($candidates as $route) {
+                if (! $route->matchesMethod($request->method())) {
+                    continue;
+                }
+
+                $parameters = $route->extractParameters($path);
+
+                if ($parameters === null) {
+                    continue;
+                }
+
+                $route->matches($request); // keeps Route::getParameters() in sync
+                $request->setAttribute('_route_params', $parameters);
+
+                return $route;
             }
-
-            $parameters = $route->extractParameters($path);
-
-            if ($parameters === null) {
-                continue;
-            }
-
-            $route->matches($request); // keeps Route::getParameters() in sync
-            $request->setAttribute('_route_params', $parameters);
-
-            return $route;
         }
 
         return null;
@@ -72,7 +100,7 @@ class RouteCollection
     {
         $allowed = [];
 
-        foreach ($this->routes as $route) {
+        foreach ($this->all() as $route) {
             if ($route->matchesPath($path)) {
                 $allowed = array_merge($allowed, $route->getMethods());
             }
@@ -108,7 +136,7 @@ class RouteCollection
     {
         $this->named = [];
 
-        foreach ($this->routes as $route) {
+        foreach ($this->all() as $route) {
             $routeName = $route->getName();
 
             if ($routeName !== '') {
@@ -120,17 +148,27 @@ class RouteCollection
     }
 
     /**
-     * Get all registered routes.
+     * Get all registered routes, in the order they are matched.
      *
      * @return Route[]
      */
     public function all(): array
     {
-        return $this->routes;
+        return array_merge($this->routes, $this->fallbacks);
+    }
+
+    /**
+     * Get only the fallback routes.
+     *
+     * @return Route[]
+     */
+    public function fallbacks(): array
+    {
+        return $this->fallbacks;
     }
 
     public function count(): int
     {
-        return count($this->routes);
+        return count($this->routes) + count($this->fallbacks);
     }
 }

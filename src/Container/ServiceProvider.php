@@ -53,9 +53,26 @@ abstract class ServiceProvider
 
     protected function loadViewsFrom(string $path, string $namespace): void
     {
-        if ($this->app->has('blade')) {
-            $this->app->make('blade')->addNamespace($namespace, $path);
+        if (! $this->app->has('blade')) {
+            return;
         }
+
+        $blade = $this->app->make('blade');
+
+        // Published overrides win.
+        //
+        // Packages publish their views to src/resources/views/vendor/<ns> so
+        // an application can customise them, but only the package's own
+        // directory was ever registered — so `vendor:publish` wrote a full
+        // copy of every view that the engine then ignored. Editing one had no
+        // effect, and there was nothing to indicate why.
+        $published = $this->app->resourcePath('views' . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . $namespace);
+
+        if (is_dir($published)) {
+            $blade->addNamespace($namespace, $published);
+        }
+
+        $blade->addNamespace($namespace, $path);
     }
 
     protected function loadMigrationsFrom(string $path): void

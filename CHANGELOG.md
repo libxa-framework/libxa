@@ -15,6 +15,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-08-13
+
+Four fixes, all found by building a real application on top of the framework
+rather than by reading it. Each one failed silently: no exception, no log line,
+nothing to suggest where to look.
+
+### Added
+
+- **`Router::fallback()`** — a catch-all matched only after every other route,
+  regardless of when it was registered.
+
+  ```php
+  $router->fallback([PageController::class, 'notFound']);
+  ```
+
+  The obvious spelling, a wildcard `get('/{path}', ...)->where('path', '.*')`
+  at the bottom of `routes/web.php`, is matched in *registration* order. A
+  package registers its routes while its provider boots, which happens after
+  the application's route file has run — so the wildcard is registered first
+  and swallows every route the package adds. Installing an admin panel made
+  the entire panel 404, with both files looking perfectly correct.
+
+  `fallback()` spans slashes by default, since a fallback that stopped at the
+  first segment would miss exactly the nested URLs it exists to catch.
+
+### Fixed
+
+- **`Model::where($column, $value)`** threw *"Unsupported SQL operator"*.
+
+  The model forwarded three arguments to the builder unconditionally, and the
+  builder decides whether the second is an operator or a value by counting
+  arguments — so the value was read as an operator. The most common query
+  anyone writes against a model did not work. `where('email', $address)` now
+  means equality, and the three-argument form still validates the operator.
+
+- **The HTTP kernel is now a shared instance.**
+
+  `HttpKernel::pushMiddleware()` is documented as how packages and providers
+  register global middleware, but the kernel was never bound in the container,
+  and resolving an unbound class builds a new object every time. A provider
+  calling `$app->make(HttpKernel::class)->pushMiddleware(...)` was mutating a
+  second kernel that no request ever passed through. The middleware simply
+  never ran. `$app->has(HttpKernel::class)` also returned `false`, so the
+  careful spelling — guarding before pushing — did nothing at all.
+
+- **Published views now actually override the package's.**
+
+  Packages publish their views to `src/resources/views/vendor/<namespace>` so
+  an application can customise them, but `loadViewsFrom()` only ever
+  registered the package's own directory. `vendor:publish` wrote a full copy
+  of every view that the engine then ignored: editing one had no effect, and
+  nothing said why. The published directory is now searched first, falling
+  back to the package for anything not published — so keeping the one view you
+  changed and deleting the rest works, which is what people actually do.
+
+### Added (schema)
+
+- `Blueprint::unsignedBigInteger()`, `Blueprint::ipAddress()`, and `primary()`
+  emitted inside `CREATE TABLE`.
+
 ## [0.11.0] - 2026-08-12
 
 > **Minor bump, not a patch.** Removing the Nova module deletes public classes,
