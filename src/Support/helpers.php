@@ -593,7 +593,10 @@ if (! function_exists('broadcast')) {
             return app('broadcast')->connection($event);
         }
 
-        return app('broadcast')->send($event);
+        // event(), not send(). BroadcastManager has never had a send() method,
+        // so the documented spelling — broadcast(new SomethingHappened) — has
+        // always been a fatal error, which is why nothing was broadcasting.
+        return app('broadcast')->event($event);
     }
 }
 

@@ -15,6 +15,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-08-13
+
+Broadcasting, which had never worked, now does. Both of these were found by
+building a WebSocket server against it.
+
+### Added
+
+- **`BroadcastManager::extend()`** — register a broadcaster from a package.
+
+  ```php
+  $this->app->make('broadcast')->extend('socket', fn ($config) => new SocketBroadcaster(...));
+  ```
+
+  A driver previously had to be a `create<Name>Driver` method on
+  BroadcastManager, so the only way to add one was to edit the framework. That
+  made broadcasting the single subsystem a package could not extend, and a
+  realtime package the obvious thing that could not be written.
+
+  A driver registered under a built-in's name replaces it, so an application
+  can swap the shipped implementation without the framework knowing. Registering
+  after something already resolved that name takes effect, because providers
+  boot in an order nobody controls.
+
+- **`BroadcastManager::availableDrivers()`**, and the unknown-driver exception
+  now lists them. "Driver [x] is not supported" without naming the alternatives
+  turns a typo into a hunt through the framework.
+
+### Fixed
+
+- **`broadcast(new SomethingHappened)` was a fatal error.**
+
+  The helper called `BroadcastManager::send()`, a method that has never
+  existed. Every documented use of the helper raised *Call to undefined
+  method*, which means nothing has ever been broadcast through it. It calls
+  `event()` now.
+
 ## [0.11.1] - 2026-08-13
 
 Four fixes, all found by building a real application on top of the framework
