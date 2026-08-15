@@ -135,7 +135,9 @@ class Application extends Container
                     
                     // Only load libxa packages
                     if (str_starts_with($name, 'libxa/') || str_starts_with($name, 'libxaframe/')) {
-                        // Check for laravel-style provider discovery
+                        // Some packages declare providers under a different
+                        // extra key. The name is theirs, not ours: it is read
+                        // so those packages keep working, not written.
                         if (isset($extra['laravel']['providers'])) {
                             foreach ($extra['laravel']['providers'] as $provider) {
                                 if (class_exists($provider)) {

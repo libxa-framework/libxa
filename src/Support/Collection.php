@@ -8,7 +8,7 @@ namespace Libxa\Support;
  * LibxaFrame Collection
  *
  * Fluent, immutable-style wrapper around arrays.
- * Inspired by Laravel Collections but lightweight.
+ * A lightweight collection wrapper.
  */
 class Collection implements \Countable, \IteratorAggregate, \JsonSerializable
 {
