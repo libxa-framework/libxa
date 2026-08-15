@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Libxa\Support;
 
 /**
- * Fluent string wrapper (clone of Laravel's Stringable).
+ * Fluent string wrapper.
  */
 class StringableProxy
 {

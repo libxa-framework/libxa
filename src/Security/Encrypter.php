@@ -15,7 +15,7 @@ use RuntimeException;
  *    or misconfigured APP_KEY used to produce quietly weakened ciphertext
  *    that still round-tripped correctly in local testing.
  *  - "base64:..." keys (the format key:generate emits, and the format every
- *    Laravel-shaped .env uses) are decoded instead of being used as literal
+ *    a base64-prefixed .env uses) are decoded instead of being used as literal
  *    ASCII.
  *  - decrypt() unserializes with allowed_classes => false. The MAC makes
  *    forged payloads impractical, but if a key ever leaks, object injection

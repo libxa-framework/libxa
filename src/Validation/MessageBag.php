@@ -45,7 +45,7 @@ class MessageBag
 
     /**
      * Get all messages in the bag, flattened into a single flat list of
-     * message strings (matches Laravel's $errors->all() behavior, which is
+     * message strings (which is
      * what views loop over with `@foreach ($errors->all() as $error)`).
      */
     public function all(): array
