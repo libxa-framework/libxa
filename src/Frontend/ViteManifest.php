@@ -20,19 +20,45 @@ class ViteManifest
     public static function tags(array|string $entries): string
     {
         $app = Application::getInstance();
+
+        // The hot file exists only while the dev server is running, and it
+        // says which port it came up on. Trusting it rather than APP_ENV is
+        // what stops a locally-served page from pointing every asset at a dev
+        // server that is not there — which renders as a page with no styles
+        // and no JavaScript, and no clue in the output as to why.
+        if (($hot = static::hotUrl()) !== null) {
+            return static::devTags((array) $entries, $hot);
+        }
+
         $env = $app?->env('APP_ENV', 'local');
 
-        // In local dev: use Vite dev server
-        if ($env === 'local' || $env === 'development') {
+        // No hot file and no build either: a project whose Vite config predates
+        // the hot file, being developed locally. The dev server is the only
+        // place the assets could be coming from, so keep the old behaviour.
+        if (($env === 'local' || $env === 'development') && static::loadManifest() === []) {
             return static::devTags((array) $entries);
         }
 
         return static::prodTags((array) $entries);
     }
 
-    protected static function devTags(array $entries): string
+    /** The dev server's URL, if one is running. */
+    protected static function hotUrl(): ?string
     {
-        $devUrl = Application::getInstance()?->env('VITE_URL', 'http://localhost:5173');
+        $path = Application::getInstance()?->publicPath('hot') ?? 'src/public/hot';
+
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $url = trim((string) file_get_contents($path));
+
+        return $url !== '' ? rtrim($url, '/') : null;
+    }
+
+    protected static function devTags(array $entries, ?string $devUrl = null): string
+    {
+        $devUrl ??= Application::getInstance()?->env('VITE_URL', 'http://localhost:5173');
         $tags   = "<script type=\"module\" src=\"$devUrl/@vite/client\"></script>\n";
 
         foreach ($entries as $entry) {

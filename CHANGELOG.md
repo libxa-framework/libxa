@@ -15,6 +15,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-19
+
+Databases. All three drivers work, the config file that configures them is
+finally read, and a missing driver now says which one and how to install it.
+
+Found by running `php libxa migrate` on a real project and following the
+error rather than the assumption.
+
+### Added
+
+- **`DriverUnavailableException`** replaces PDO's *"could not find driver"*.
+
+  Six words that name neither the driver you asked for, nor the extension
+  that provides it, nor which of several installed PHP builds is running —
+  and which read identically whether the missing piece is MySQL, Postgres or
+  SQLite.
+
+  ```
+  Database driver "pgsql" is not available in this PHP build.
+
+    PHP binary : C:\php\php.exe
+    PHP version: 8.4.19
+    php.ini    : C:\php\php.ini
+    PDO has    : mysql, sqlite
+
+  Enable it by adding this line to php.ini and restarting PHP:
+
+      extension=pdo_pgsql
+  ```
+
+  When PDO has no drivers at all it says something different, because that
+  has one cause — `extension_dir` — and it is not that each driver is
+  separately absent.
+
+- **Driver aliases.** `postgres`, `postgresql`, `mariadb` and `sqlite3` are
+  what people write in `.env` files. Refusing them because the internal name
+  differs is a spelling test, not a safety check.
+
+- **`ConnectionPool::extensionFor()`, `normalizeDriver()`, `defaultPort()`** —
+  public, because the CLI and installers need the same answers.
+
+- **Connection failures name their target.** A bare *Connection refused* does
+  not say to which host, port, database or user — which matters most when the
+  answer turns out to be that the config in use is not the config being
+  edited.
+
+- **A wrong-engine port is called out.** `DB_PORT` is one setting shared by
+  every driver, so switching `DB_CONNECTION` from mysql to pgsql leaves 3306
+  in place and fails with a transport error that never mentions the port.
+
+- **Postgres options**: `schema` and `sslmode`.
+
+### Fixed
+
+- **`config/database.php` was decorative.**
+
+  `DatabaseServiceProvider` configures the pool inside a container factory,
+  and every call site reaches the pool through the static `getInstance()`, so
+  the factory never ran and the file was never read. Projects edited it, saw
+  no effect, and found nothing anywhere explaining why — migrations quietly
+  ran against whatever `DB_DATABASE` happened to name.
+
+  `resolveFromEnv()` now consults the application config before falling back
+  to the environment.
+
+- **`DB_CONNECTION` and `DB_DRIVER` were two names for one setting.**
+
+  `.env.example` shipped one and `config/database.php` read the other, so
+  which won depended on which code path resolved the connection first.
+  `DB_CONNECTION` is the documented name; `DB_DRIVER` is still read, so
+  upgrading does not silently move a project to a different database.
+
+- **Windows absolute paths were treated as relative.** The check was a leading
+  slash, so `C:\srv\app.sqlite` was re-rooted into the project's database
+  directory as `C:\proj\src\database\C:\srv\app.sqlite`.
+
+- **`SET NAMES` and `SET search_path`** interpolated their values directly.
+  Neither accepts a bound parameter, so both are now matched against a
+  whitelist instead.
+
+### Changed
+
+- **Selecting a connection that is not defined now fails** instead of falling
+  back to SQLite, which let an application run happily against a database it
+  was never configured for.
+
+  This is why the release is a minor bump: a project naming a connection that
+  does not exist used to start, and now stops.
+
+
 ## [0.11.2] - 2026-08-13
 
 Broadcasting, which had never worked, now does. Both of these were found by
@@ -317,7 +407,10 @@ picks this up without any action.
 Baseline for this changelog. Earlier releases are catalogued in the repository
 history and, for the July 2026 audit, in [CHANGES.md](CHANGES.md).
 
-[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/libxa-framework/libxa/compare/v0.11.2...v0.12.0
+[0.11.2]: https://github.com/libxa-framework/libxa/compare/v0.11.1...v0.11.2
+[0.11.1]: https://github.com/libxa-framework/libxa/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/libxa-framework/libxa/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/libxa-framework/libxa/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/libxa-framework/libxa/compare/v0.10.1...v0.10.2
