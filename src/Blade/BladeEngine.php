@@ -286,7 +286,7 @@ class BladeEngine
      * Evaluate a compiled view file in an isolated scope.
      *
      * Internal variables are prefixed with __ to avoid collision with
-     * user-provided view data (mirrors Laravel's PhpEngine approach).
+     * user-provided view data.
      */
     protected function evaluateView(string $__path, array $__data): string
     {
@@ -330,7 +330,7 @@ class BladeEngine
 
         // The validation error bag ($errors) is expected to be available in
         // *every* view, even when nothing failed validation and no
-        // controller explicitly passed it in (mirrors Laravel's behavior).
+        // controller explicitly passed it in.
         // Without this, `@if($errors->any())` in a view fatals with
         // "Call to a member function any() on null" the first time it's
         // rendered without an explicit $errors variable.
@@ -441,8 +441,8 @@ class BladeEngine
     /**
      * Register a namespace. Can be called multiple times for the same
      * namespace to register additional fallback paths (checked in the
-     * order they were added): matches Laravel's addNamespace() behavior
-     * where modules/packages can layer views on top of each other.
+     * order they were added), so modules and packages can layer views on top
+     * of each other.
      */
     public function addNamespace(string $namespace, string|array $path): void
     {

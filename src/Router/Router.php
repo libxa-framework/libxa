@@ -79,6 +79,24 @@ class Router
     }
 
     /**
+     * Register a catch-all that runs only when no other route matched.
+     *
+     * Use this for a custom 404 page instead of a wildcard `get()` at the
+     * bottom of routes/web.php. A wildcard is matched in registration order,
+     * and packages register their routes later, while their providers boot —
+     * so the wildcard swallows them and the package's pages 404 with nothing
+     * in either file to explain why.
+     *
+     * The default pattern spans slashes, since a fallback that stopped at the
+     * first segment would miss exactly the nested URLs it exists to catch.
+     */
+    public function fallback(array|string|callable $action, string $parameter = 'path'): Route
+    {
+        return $this->addRoute(['GET', 'HEAD'], '/{' . $parameter . '}', $action, fallback: true)
+            ->where($parameter, '.*');
+    }
+
+    /**
      * Register a full-page LiveLib reactive component route.
      */
     public function livelib(string $uri, string $component): Route
@@ -206,7 +224,7 @@ class Router
     //  Core Registration
     // ─────────────────────────────────────────────────────────────────
 
-    protected function addRoute(array $methods, string $uri, mixed $action): Route
+    protected function addRoute(array $methods, string $uri, mixed $action, bool $fallback = false): Route
     {
         $uri    = $this->applyGroupPrefix($uri);
         $route  = new Route($methods, $uri, $action);
@@ -219,7 +237,11 @@ class Router
 
         $route->setNamePrefix($this->getGroupNamePrefix());
 
-        $this->routes->add($route);
+        if ($fallback) {
+            $this->routes->addFallback($route);
+        } else {
+            $this->routes->add($route);
+        }
 
         return $route;
     }

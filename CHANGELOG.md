@@ -15,6 +15,192 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-18
+
+Databases. All three drivers work, the config file that configures them is
+finally read, and a missing driver now says which one and how to install it.
+
+Found by running `php libxa migrate` on a real project and following the
+error rather than the assumption.
+
+### Added
+
+- **`DriverUnavailableException`** replaces PDO's *"could not find driver"*.
+
+  Six words that name neither the driver you asked for, nor the extension
+  that provides it, nor which of several installed PHP builds is running —
+  and which read identically whether the missing piece is MySQL, Postgres or
+  SQLite.
+
+  ```
+  Database driver "pgsql" is not available in this PHP build.
+
+    PHP binary : C:\php\php.exe
+    PHP version: 8.4.19
+    php.ini    : C:\php\php.ini
+    PDO has    : mysql, sqlite
+
+  Enable it by adding this line to php.ini and restarting PHP:
+
+      extension=pdo_pgsql
+  ```
+
+  When PDO has no drivers at all it says something different, because that
+  has one cause — `extension_dir` — and it is not that each driver is
+  separately absent.
+
+- **Driver aliases.** `postgres`, `postgresql`, `mariadb` and `sqlite3` are
+  what people write in `.env` files. Refusing them because the internal name
+  differs is a spelling test, not a safety check.
+
+- **`ConnectionPool::extensionFor()`, `normalizeDriver()`, `defaultPort()`** —
+  public, because the CLI and installers need the same answers.
+
+- **Connection failures name their target.** A bare *Connection refused* does
+  not say to which host, port, database or user — which matters most when the
+  answer turns out to be that the config in use is not the config being
+  edited.
+
+- **A wrong-engine port is called out.** `DB_PORT` is one setting shared by
+  every driver, so switching `DB_CONNECTION` from mysql to pgsql leaves 3306
+  in place and fails with a transport error that never mentions the port.
+
+- **Postgres options**: `schema` and `sslmode`.
+
+### Fixed
+
+- **`config/database.php` was decorative.**
+
+  `DatabaseServiceProvider` configures the pool inside a container factory,
+  and every call site reaches the pool through the static `getInstance()`, so
+  the factory never ran and the file was never read. Projects edited it, saw
+  no effect, and found nothing anywhere explaining why — migrations quietly
+  ran against whatever `DB_DATABASE` happened to name.
+
+  `resolveFromEnv()` now consults the application config before falling back
+  to the environment.
+
+- **`DB_CONNECTION` and `DB_DRIVER` were two names for one setting.**
+
+  `.env.example` shipped one and `config/database.php` read the other, so
+  which won depended on which code path resolved the connection first.
+  `DB_CONNECTION` is the documented name; `DB_DRIVER` is still read, so
+  upgrading does not silently move a project to a different database.
+
+- **Windows absolute paths were treated as relative.** The check was a leading
+  slash, so `C:\srv\app.sqlite` was re-rooted into the project's database
+  directory as `C:\proj\src\database\C:\srv\app.sqlite`.
+
+- **`SET NAMES` and `SET search_path`** interpolated their values directly.
+  Neither accepts a bound parameter, so both are now matched against a
+  whitelist instead.
+
+### Changed
+
+- **Selecting a connection that is not defined now fails** instead of falling
+  back to SQLite, which let an application run happily against a database it
+  was never configured for.
+
+  This is why the release is a minor bump: a project naming a connection that
+  does not exist used to start, and now stops.
+
+
+## [0.11.2] - 2026-08-13
+
+Broadcasting, which had never worked, now does. Both of these were found by
+building a WebSocket server against it.
+
+### Added
+
+- **`BroadcastManager::extend()`** — register a broadcaster from a package.
+
+  ```php
+  $this->app->make('broadcast')->extend('socket', fn ($config) => new SocketBroadcaster(...));
+  ```
+
+  A driver previously had to be a `create<Name>Driver` method on
+  BroadcastManager, so the only way to add one was to edit the framework. That
+  made broadcasting the single subsystem a package could not extend, and a
+  realtime package the obvious thing that could not be written.
+
+  A driver registered under a built-in's name replaces it, so an application
+  can swap the shipped implementation without the framework knowing. Registering
+  after something already resolved that name takes effect, because providers
+  boot in an order nobody controls.
+
+- **`BroadcastManager::availableDrivers()`**, and the unknown-driver exception
+  now lists them. "Driver [x] is not supported" without naming the alternatives
+  turns a typo into a hunt through the framework.
+
+### Fixed
+
+- **`broadcast(new SomethingHappened)` was a fatal error.**
+
+  The helper called `BroadcastManager::send()`, a method that has never
+  existed. Every documented use of the helper raised *Call to undefined
+  method*, which means nothing has ever been broadcast through it. It calls
+  `event()` now.
+
+## [0.11.1] - 2026-08-13
+
+Four fixes, all found by building a real application on top of the framework
+rather than by reading it. Each one failed silently: no exception, no log line,
+nothing to suggest where to look.
+
+### Added
+
+- **`Router::fallback()`** — a catch-all matched only after every other route,
+  regardless of when it was registered.
+
+  ```php
+  $router->fallback([PageController::class, 'notFound']);
+  ```
+
+  The obvious spelling, a wildcard `get('/{path}', ...)->where('path', '.*')`
+  at the bottom of `routes/web.php`, is matched in *registration* order. A
+  package registers its routes while its provider boots, which happens after
+  the application's route file has run — so the wildcard is registered first
+  and swallows every route the package adds. Installing an admin panel made
+  the entire panel 404, with both files looking perfectly correct.
+
+  `fallback()` spans slashes by default, since a fallback that stopped at the
+  first segment would miss exactly the nested URLs it exists to catch.
+
+### Fixed
+
+- **`Model::where($column, $value)`** threw *"Unsupported SQL operator"*.
+
+  The model forwarded three arguments to the builder unconditionally, and the
+  builder decides whether the second is an operator or a value by counting
+  arguments — so the value was read as an operator. The most common query
+  anyone writes against a model did not work. `where('email', $address)` now
+  means equality, and the three-argument form still validates the operator.
+
+- **The HTTP kernel is now a shared instance.**
+
+  `HttpKernel::pushMiddleware()` is documented as how packages and providers
+  register global middleware, but the kernel was never bound in the container,
+  and resolving an unbound class builds a new object every time. A provider
+  calling `$app->make(HttpKernel::class)->pushMiddleware(...)` was mutating a
+  second kernel that no request ever passed through. The middleware simply
+  never ran. `$app->has(HttpKernel::class)` also returned `false`, so the
+  careful spelling — guarding before pushing — did nothing at all.
+
+- **Published views now actually override the package's.**
+
+  Packages publish their views to `src/resources/views/vendor/<namespace>` so
+  an application can customise them, but `loadViewsFrom()` only ever
+  registered the package's own directory. `vendor:publish` wrote a full copy
+  of every view that the engine then ignored: editing one had no effect, and
+  nothing said why. The published directory is now searched first, falling
+  back to the package for anything not published — so keeping the one view you
+  changed and deleting the rest works, which is what people actually do.
+
+### Added (schema)
+
+- `Blueprint::unsignedBigInteger()`, `Blueprint::ipAddress()`, and `primary()`
+  emitted inside `CREATE TABLE`.
+
 ## [0.11.0] - 2026-08-12
 
 > **Minor bump, not a patch.** Removing the Nova module deletes public classes,
@@ -221,7 +407,10 @@ picks this up without any action.
 Baseline for this changelog. Earlier releases are catalogued in the repository
 history and, for the July 2026 audit, in [CHANGES.md](CHANGES.md).
 
-[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/libxa-framework/libxa/compare/v0.11.2...v0.12.0
+[0.11.2]: https://github.com/libxa-framework/libxa/compare/v0.11.1...v0.11.2
+[0.11.1]: https://github.com/libxa-framework/libxa/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/libxa-framework/libxa/compare/v0.10.3...v0.11.0
 [0.10.3]: https://github.com/libxa-framework/libxa/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/libxa-framework/libxa/compare/v0.10.1...v0.10.2

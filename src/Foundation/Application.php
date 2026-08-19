@@ -135,7 +135,9 @@ class Application extends Container
                     
                     // Only load libxa packages
                     if (str_starts_with($name, 'libxa/') || str_starts_with($name, 'libxaframe/')) {
-                        // Check for laravel-style provider discovery
+                        // Some packages declare providers under a different
+                        // extra key. The name is theirs, not ours: it is read
+                        // so those packages keep working, not written.
                         if (isset($extra['laravel']['providers'])) {
                             foreach ($extra['laravel']['providers'] as $provider) {
                                 if (class_exists($provider)) {
@@ -550,6 +552,17 @@ class Application extends Container
         $this->instance(Application::class, $this);
         $this->instance(Container::class, $this);
         $this->instance(ContextGraph::class, new ContextGraph($this->context));
+
+        // The kernels are shared, or their middleware stacks are fiction.
+        //
+        // HttpKernel::pushMiddleware() exists so packages and providers can
+        // add global middleware, but resolving an unbound class builds a new
+        // object every time. A provider that pushed middleware in boot() was
+        // therefore mutating a second kernel that nothing ever ran a request
+        // through, and the middleware simply never fired — with no error, and
+        // nothing in the stack to suggest where it went.
+        $this->singleton(HttpKernel::class);
+        $this->singleton(ConsoleKernel::class);
     }
 
     protected function registerCoreProviders(): void

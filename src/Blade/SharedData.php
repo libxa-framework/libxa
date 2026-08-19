@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Libxa\Blade;
 
 /**
- * Shared data store: works like View::share() in Laravel.
+ * Shared data store: values made available to every view.
  */
 class SharedData
 {
