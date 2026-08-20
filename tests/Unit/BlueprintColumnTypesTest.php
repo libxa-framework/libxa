@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use Libxa\Atlas\Schema\Blueprint;
+use Libxa\Atlas\Schema\Grammar;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -24,16 +25,25 @@ final class BlueprintColumnTypesTest extends TestCase
 
     public function test_unsigned_big_integer_matches_what_id_produces(): void
     {
-        // A foreign key referencing id() has to be an unsigned big integer.
-        // bigInteger() is signed and unsignedInteger() is too narrow, so
-        // neither could be used for the most common foreign key there is.
-        $table = new Blueprint('audit_logs', self::pdo());
-        $table->unsignedBigInteger('resource_id');
+        // A foreign key referencing id() has to be able to hold every value
+        // id() can generate. That invariant is the same on every database;
+        // only the spelling differs, so each dialect is checked against the
+        // type its own id() produces rather than against MySQL's.
+        $expected = [
+            'mysql'  => 'BIGINT UNSIGNED',
+            'pgsql'  => 'BIGINT',
+            'sqlite' => 'INTEGER',
+        ];
 
-        $sql = $table->toSql();
+        foreach ($expected as $driver => $type) {
+            $table = new Blueprint('audit_logs', self::pdo(), false, Grammar::forDriver($driver));
+            $table->unsignedBigInteger('resource_id');
 
-        self::assertStringContainsString('BIGINT UNSIGNED', $sql);
-        self::assertStringContainsString('resource_id', $sql);
+            $sql = $table->toSql();
+
+            self::assertStringContainsString($type, $sql, $driver);
+            self::assertStringContainsString('resource_id', $sql, $driver);
+        }
     }
 
     public function test_ip_address_is_wide_enough_for_ipv6(): void
