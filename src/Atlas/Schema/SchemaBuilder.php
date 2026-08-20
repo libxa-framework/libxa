@@ -30,12 +30,14 @@ class SchemaBuilder
 
     public function drop(string $table): void
     {
-        $this->pdo->exec("DROP TABLE IF EXISTS `$table`");
+        $this->dropIfExists($table);
     }
 
     public function dropIfExists(string $table): void
     {
-        $this->pdo->exec("DROP TABLE IF EXISTS `$table`");
+        // Backticks are MySQL and SQLite only; Postgres reads them as a
+        // syntax error, so the identifier is quoted by the grammar.
+        $this->pdo->exec('DROP TABLE IF EXISTS ' . Grammar::for($this->pdo)->wrap($table));
     }
 
     public function hasTable(string $table): bool
@@ -66,7 +68,7 @@ class SchemaBuilder
         return match ($driver) {
             'sqlite' => in_array(
                 $column,
-                $this->pdo->query("PRAGMA table_info(`$table`)")?->fetchAll(\PDO::FETCH_COLUMN, 1) ?? []
+                $this->pdo->query('PRAGMA table_info(' . Grammar::for($this->pdo)->wrap($table) . ')')?->fetchAll(\PDO::FETCH_COLUMN, 1) ?? []
             ),
 
             'mysql'  => (bool) $this->pdo->query(

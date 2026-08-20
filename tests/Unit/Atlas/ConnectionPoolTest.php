@@ -169,7 +169,6 @@ final class ConnectionPoolTest extends TestCase
         // re-rooted it under the project's database directory, producing
         // C:\proj\src\database\C:\srv\app.sqlite — a path that cannot exist.
         $method = new \ReflectionMethod(ConnectionPool::class, 'isAbsolutePath');
-        $method->setAccessible(true);
 
         self::assertTrue($method->invoke(null, 'C:\\srv\\app.sqlite'));
         self::assertTrue($method->invoke(null, 'C:/srv/app.sqlite'));
