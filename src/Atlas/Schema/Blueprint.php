@@ -24,11 +24,26 @@ class Blueprint
     protected array $foreigns   = [];
     protected bool  $incrementId = false;
 
+    protected Grammar $grammar;
+
     public function __construct(
         protected string $table,
         protected \PDO   $pdo,
         protected bool   $alter = false,
-    ) {}
+        ?Grammar $grammar = null,
+    ) {
+        $this->grammar = $grammar ?? Grammar::for($pdo);
+    }
+
+    public function grammar(): Grammar
+    {
+        return $this->grammar;
+    }
+
+    public function table(): string
+    {
+        return $this->table;
+    }
 
     // ─────────────────────────────────────────────────────────────────
     //  Column types
@@ -37,44 +52,44 @@ class Blueprint
     public function id(string $column = 'id'): static
     {
         $this->incrementId = true;
-        $this->columns[]   = "$column INTEGER PRIMARY KEY AUTOINCREMENT";
+        $this->columns[]   = $this->grammar->increments($column);
         return $this;
     }
 
     public function uuid(string $column = 'id'): static
     {
-        $this->columns[] = "$column VARCHAR(36) PRIMARY KEY";
+        $this->columns[] = $this->grammar->wrap($column) . ' ' . $this->grammar->type('uuid') . ' PRIMARY KEY';
         return $this;
     }
 
     public function string(string $column, int $length = 255): ColumnDefinition
     {
-        return $this->addColumn($column, "VARCHAR($length)");
+        return $this->addColumn($column, 'string', ['length' => $length]);
     }
 
     public function text(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'TEXT');
+        return $this->addColumn($column, 'text');
     }
 
     public function longText(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'LONGTEXT');
+        return $this->addColumn($column, 'longText');
     }
 
     public function integer(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'INTEGER');
+        return $this->addColumn($column, 'integer');
     }
 
     public function unsignedInteger(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'INTEGER UNSIGNED');
+        return $this->addColumn($column, 'unsignedInteger');
     }
 
     public function bigInteger(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'BIGINT');
+        return $this->addColumn($column, 'bigInteger');
     }
 
     /**
@@ -87,7 +102,7 @@ class Blueprint
      */
     public function unsignedBigInteger(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'BIGINT UNSIGNED');
+        return $this->addColumn($column, 'unsignedBigInteger');
     }
 
     /**
@@ -99,53 +114,52 @@ class Blueprint
      */
     public function ipAddress(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'VARCHAR(45)');
+        return $this->addColumn($column, 'string', ['length' => 45]);
     }
 
     public function float(string $column, int $total = 8, int $places = 2): ColumnDefinition
     {
-        return $this->addColumn($column, "FLOAT($total,$places)");
+        return $this->addColumn($column, 'float', ['total' => $total, 'places' => $places]);
     }
 
     public function decimal(string $column, int $total = 8, int $places = 2): ColumnDefinition
     {
-        return $this->addColumn($column, "DECIMAL($total,$places)");
+        return $this->addColumn($column, 'decimal', ['total' => $total, 'places' => $places]);
     }
 
     public function boolean(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'TINYINT(1)');
+        return $this->addColumn($column, 'boolean');
     }
 
     public function date(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'DATE');
+        return $this->addColumn($column, 'date');
     }
 
     public function dateTime(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'DATETIME');
+        return $this->addColumn($column, 'dateTime');
     }
 
     public function timestamp(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'TIMESTAMP');
+        return $this->addColumn($column, 'timestamp');
     }
 
     public function json(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'JSON');
+        return $this->addColumn($column, 'json');
     }
 
     public function enum(string $column, array $values): ColumnDefinition
     {
-        $list = implode(',', array_map(fn($v) => "'$v'", $values));
-        return $this->addColumn($column, "ENUM($list)");
+        return $this->addColumn($column, 'enum', ['values' => $values]);
     }
 
     public function binary(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'BLOB');
+        return $this->addColumn($column, 'binary');
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -154,14 +168,14 @@ class Blueprint
 
     public function timestamps(): static
     {
-        $this->addColumn('created_at', 'DATETIME')->nullable();
-        $this->addColumn('updated_at', 'DATETIME')->nullable();
+        $this->addColumn('created_at', 'dateTime')->nullable();
+        $this->addColumn('updated_at', 'dateTime')->nullable();
         return $this;
     }
 
     public function softDeletes(string $column = 'deleted_at'): static
     {
-        $this->addColumn($column, 'DATETIME')->nullable();
+        $this->addColumn($column, 'dateTime')->nullable();
         return $this;
     }
 
@@ -174,12 +188,12 @@ class Blueprint
 
     public function foreignId(string $column): ColumnDefinition
     {
-        return $this->addColumn($column, 'BIGINT UNSIGNED');
+        return $this->addColumn($column, 'unsignedBigInteger');
     }
 
     public function rememberToken(): static
     {
-        $this->addColumn('remember_token', 'VARCHAR(100)')->nullable();
+        $this->addColumn('remember_token', 'string', ['length' => 100])->nullable();
         return $this;
     }
 
@@ -189,9 +203,11 @@ class Blueprint
 
     public function index(string|array $columns, ?string $name = null): static
     {
-        $cols = implode(', ', (array) $columns);
+        $cols = $this->grammar->wrapAll((array) $columns);
         $name = $name ?? 'idx_' . $this->table . '_' . implode('_', (array) $columns);
-        $this->indexes[] = "CREATE INDEX IF NOT EXISTS $name ON {$this->table} ($cols)";
+        $exists = $this->grammar->supportsIndexIfNotExists() ? 'IF NOT EXISTS ' : '';
+        $this->indexes[] = 'CREATE INDEX ' . $exists . $this->grammar->wrap($name)
+            . ' ON ' . $this->grammar->wrap($this->table) . " ($cols)";
         return $this;
     }
 
@@ -208,7 +224,7 @@ class Blueprint
      */
     public function primary(string|array $columns): static
     {
-        $cols = implode(', ', array_map(static fn (string $c): string => "`{$c}`", (array) $columns));
+        $cols = $this->grammar->wrapAll((array) $columns);
 
         $this->columns[] = "PRIMARY KEY ($cols)";
 
@@ -217,9 +233,11 @@ class Blueprint
 
     public function unique(string|array $columns, ?string $name = null): static
     {
-        $cols = implode(', ', (array) $columns);
+        $cols = $this->grammar->wrapAll((array) $columns);
         $name = $name ?? 'uq_' . $this->table . '_' . implode('_', (array) $columns);
-        $this->indexes[] = "CREATE UNIQUE INDEX IF NOT EXISTS $name ON {$this->table} ($cols)";
+        $exists = $this->grammar->supportsIndexIfNotExists() ? 'IF NOT EXISTS ' : '';
+        $this->indexes[] = 'CREATE UNIQUE INDEX ' . $exists . $this->grammar->wrap($name)
+            . ' ON ' . $this->grammar->wrap($this->table) . " ($cols)";
         return $this;
     }
 
@@ -234,9 +252,9 @@ class Blueprint
     //  Add column helper
     // ─────────────────────────────────────────────────────────────────
 
-    protected function addColumn(string $name, string $type): ColumnDefinition
+    protected function addColumn(string $name, string $type, array $options = []): ColumnDefinition
     {
-        $def             = new ColumnDefinition($name, $type, $this);
+        $def             = new ColumnDefinition($name, $type, $this, $options);
         $this->columns[] = $def;
         return $def;
     }
@@ -251,7 +269,7 @@ class Blueprint
         $verb   = $create ? 'CREATE TABLE' : 'ALTER TABLE';
 
         $cols = array_map(function ($col) {
-            return $col instanceof ColumnDefinition ? $col->toSql() : $col;
+            return $col instanceof ColumnDefinition ? $col->toSql($this->grammar) : $col;
         }, $this->columns);
 
         $foreigns = array_map(function ($f) {
@@ -260,32 +278,54 @@ class Blueprint
 
         $all = array_merge($cols, $foreigns);
 
-        return "$verb {$exists}`{$this->table}` (\n  " . implode(",\n  ", array_filter($all)) . "\n)";
+        $body = implode(',' . PHP_EOL . '  ', array_filter($all));
+
+        return $verb . ' ' . $exists . $this->grammar->wrap($this->table)
+            . ' (' . PHP_EOL . '  ' . $body . PHP_EOL . ')';
+    }
+
+    /**
+     * Run a statement that is allowed to be a repeat, but not to be wrong.
+     *
+     * This used to catch \Throwable and ignore it, which made a genuinely
+     * broken index indistinguishable from one that already existed: the
+     * migration reported success and the index was simply absent. Only
+     * "already exists" is tolerated now; anything else is a real failure and
+     * says so.
+     */
+    protected function run(string $sql): void
+    {
+        try {
+            $this->pdo->exec($sql);
+        } catch (\Throwable $e) {
+            if ($this->grammar->isAlreadyExists($e)) {
+                return;
+            }
+
+            throw new \RuntimeException(
+                sprintf('Schema statement failed: %s%s  %s', $e->getMessage(), PHP_EOL, $sql),
+                0,
+                $e,
+            );
+        }
     }
 
     public function build(): void
     {
         if ($this->alter) {
-            // ALTER TABLE: add each column individually
             foreach ($this->columns as $col) {
-                $colSql = $col instanceof ColumnDefinition ? $col->toSql() : $col;
-                try {
-                    $this->pdo->exec("ALTER TABLE `{$this->table}` ADD COLUMN $colSql");
-                } catch (\Throwable $e) {
-                    // Column may already exist: silently skip
-                }
+                $colSql = $col instanceof ColumnDefinition ? $col->toSql($this->grammar) : $col;
+
+                $this->run(
+                    'ALTER TABLE ' . $this->grammar->wrap($this->table) . " ADD COLUMN $colSql",
+                );
             }
         } else {
-            $sql = $this->toSql();
-            $this->pdo->exec($sql);
+            $this->pdo->exec($this->toSql());
         }
 
         foreach ($this->indexes as $indexSql) {
-            try {
-                $this->pdo->exec($indexSql);
-            } catch (\Throwable $e) {
-                // Index may already exist: silently skip
-            }
+            $this->run($indexSql);
         }
     }
 }

@@ -15,6 +15,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-08-20
+
+Migrations ran on SQLite and failed on everything else. Now one migration
+runs on all three.
+
+### Fixed
+
+- **The schema builder emitted SQLite's SQL whatever it was connected to.**
+
+  `AUTOINCREMENT`, `LONGTEXT`, `DATETIME`, `BLOB`, backtick-quoted
+  identifiers. On MySQL the first column of the first table was already a
+  syntax error, and because the parser gives up at the next token it was
+  reported at *line 2* — pointing at a column that was perfectly fine, which
+  is why the error was so hard to read:
+
+  ```
+  SQLSTATE[42000]: 1064 ... near '
+    `name` VARCHAR(255) NOT NULL,
+    `email` VARCHAR(255) NOT NULL,
+    `email_ve...' at line 2
+  ```
+
+  A migration describes intent. Which spelling that intent takes is now a
+  `Grammar`'s problem, one per driver:
+
+  | | sqlite | mysql | pgsql |
+  |---|---|---|---|
+  | `id()` | `AUTOINCREMENT` | `AUTO_INCREMENT` | `BIGSERIAL` |
+  | `boolean` | `INTEGER` | `TINYINT(1)` | `BOOLEAN` |
+  | `json` | `TEXT` | `JSON` | `JSONB` |
+  | `binary` | `BLOB` | `BLOB` | `BYTEA` |
+  | `longText` | `TEXT` | `LONGTEXT` | `TEXT` |
+  | `dateTime` | `DATETIME` | `DATETIME` | `TIMESTAMP` |
+  | identifiers | backticks | backticks | double quotes |
+
+- **`UNSIGNED` was emitted everywhere.** Postgres rejects it outright, and
+  SQLite ignores it silently — which is worse, because the column then
+  accepts negatives the schema claims it cannot hold. It is now emitted only
+  for MySQL, which is the only one that has it.
+
+- **`CREATE INDEX IF NOT EXISTS` was emitted for MySQL,** which has never
+  supported it.
+
+- **Identifiers were not quoted.** A column called `order` or `group` — both
+  reserved everywhere — produced a syntax error rather than a column.
+
+- **`build()` swallowed every error.**
+
+  It caught `Throwable` around each index and `ALTER` and ignored it, so a
+  genuinely broken statement was indistinguishable from a harmless repeat:
+  the migration reported success and the index was simply absent. Only
+  "already exists" is tolerated now; anything else fails with the offending
+  SQL attached.
+
+### Added
+
+- **`Libxa\Atlas\Schema\Grammar`**, with `SqliteGrammar`, `MySqlGrammar`
+  and `PostgresGrammar`. `Grammar::for($pdo)` picks one from the connection;
+  `Grammar::forDriver('pgsql')` is there for generating SQL without a server.
+
+### Changed
+
+- **The SQL a migration generates now depends on the connection.** That is
+  the point of the release, and it is why this is a minor bump: a project
+  that captured the old output, or that relied on MySQL types reaching a
+  SQLite database, will see different DDL.
+
+  Verified against three live servers rather than generated strings: the
+  same four migrations create the same four tables on SQLite, MariaDB 11.4
+  and PostgreSQL 18.4, each with a working auto-increment primary key, a
+  unique index, and an insert/read round trip.
+
+
 ## [0.12.0] - 2026-08-19
 
 Databases. All three drivers work, the config file that configures them is
@@ -407,7 +480,8 @@ picks this up without any action.
 Baseline for this changelog. Earlier releases are catalogued in the repository
 history and, for the July 2026 audit, in [CHANGES.md](CHANGES.md).
 
-[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/libxa-framework/libxa/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/libxa-framework/libxa/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/libxa-framework/libxa/compare/v0.11.2...v0.12.0
 [0.11.2]: https://github.com/libxa-framework/libxa/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/libxa-framework/libxa/compare/v0.11.0...v0.11.1
